@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
-import { Stage, Layer, Rect, Line, Text, Group, Circle } from "react-konva";
+import {
+  Stage,
+  Layer,
+  Rect,
+  Line,
+  Text,
+  Group,
+  Circle,
+  Image as KonvaImage,
+} from "react-konva";
 import "./App.css";
+import { supabase } from "./supabaseClient";
 
 const SAMPLE_PRODUCTS = [
   {
@@ -9,39 +19,80 @@ const SAMPLE_PRODUCTS = [
     name: "Stretch Fabric Display",
     width: 10,
     height: 1,
+    dimensions: {
+      widthFt: 10,
+      depthFt: 1,
+      heightFt: 8,
+    },
+    placementRole: "wall_display",
+    image:
+    "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1200&auto=format&fit=crop",
     color: "#4B35FD",
     price: 120,
     category: "Backdrops",
     keywords: "fabric backdrop trade show display wall",
-    productUrl: "https://www.printdrill.com/products/straight-pillow-case-tension-fabric-backdrop",
-  },
+    productImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/TensionFabricDisplays.jpg?v=1774958399",
+    canvasImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Pillow-Display-10-ft-0d.png?v=1765336351",
+    },
   {
     id: "p2",
     name: "Deluxe Popup Counter",
     width: 4,
     height: 2,
+    dimensions: {
+      widthFt: 4,
+      depthFt: 2,
+      heightFt: 3,
+    },
+    placementRole: "visitor_facing",
+    image:
+  "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1200&auto=format&fit=crop",
     color: "#0169F5",
     price: 80,
     category: "Counter",
     keywords: "event table booth counter display table",
-    productUrl: "https://www.printdrill.com/products/deluxe-popup-counter",
-  },
+    productImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Deluxe_Popup_Counter-1-min.jpg?v=1764447977",
+    canvasImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Pillow-Display-10-ft-0d.png?v=1765336351",
+    },
   {
     id: "p3",
     name: "Full Printed Table Cover Throws",
-    width: 3,
+    width: 6,
     height: 2,
+    dimensions: {
+      widthFt: 6,
+      depthFt: 2,
+      heightFt: 3,
+    },
+    placementRole: "visitor_facing",
+    image:
+  "https://images.unsplash.com/photo-1517705008128-361805f42e86?q=80&w=1200&auto=format&fit=crop",
     color: "#D4C830",
     price: 95,
     category: "Table Cover",
     keywords: "trade show table cover",
-    productUrl: "https://www.printdrill.com/products/trade-show-printed-table-cover-throws",
+    productImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Full_Color_Print_Table_Cover_Throws-min.jpg?v=1768183309",
+    canvasImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/FullColorPrintedTableCover.jpg?v=1768183309",
   },
   {
     id: "p4",
     name: "Deluxe Wide Base Roll Up",
     width: 3,
     height: 1,
+    dimensions: {
+      widthFt: 3,
+      depthFt: 1,
+      heightFt: 7,
+    },
+    placementRole: "wall_display",
+    image:
+  "https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1200&auto=format&fit=crop",
     color: "#8DFFDD",
     price: 65,
     category: "Standing Banners",
@@ -53,11 +104,23 @@ const SAMPLE_PRODUCTS = [
     name: "SEG LightBox Display",
     width: 6,
     height: 1,
+    dimensions: {
+      widthFt: 6,
+      depthFt: 1,
+      heightFt: 8,
+    },
+    image:
+  "https://images.unsplash.com/photo-1497366412874-3415097a27e7?q=80&w=1200&auto=format&fit=crop",
     color: "#DFDAFF",
     price: 220,
     category: "Lightboxes",
     keywords: "seg lightbox backlit display led booth",
-    productUrl: "https://www.printdrill.com/products/seg-lightbox-display-10-ft",
+    productImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/SEG_LightBox_Display_-_10_ft-min.jpg?v=1765745552",
+    canvasImage:
+      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/SEG_LightBox_Display_-_13_ft_x_7.4_ft_Size-min.jpg?v=1765816106",
+
+    requiresProductId: "p1",
   },
 ];
 
@@ -119,20 +182,154 @@ const ADJACENT_COLORS = {
 const FEET_TO_PIXEL = 40;
 const RULER_SIZE = 34;
 const OUTER_PADDING = 80;
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2.5;
+const ZOOM_STEP = 1.08;
+const SNAP_THRESHOLD = 10;
+
+const useImageElement = (src) => {
+  const [image, setImage] = useState(null);
+
+  useEffect(() => {
+    if (!src) return;
+
+    const img = new window.Image();
+
+    img.crossOrigin = "Anonymous";
+
+    img.src = src;
+
+    img.onload = () => {
+      setImage(img);
+    };
+  }, [src]);
+
+  return image;
+};
+
+  
+function BoothProduct({
+  item,
+  size,
+  isSelected,
+  invalidItemId,
+  hasClearanceWarning,
+}) {
+  const widthFt = item.dimensions?.widthFt ?? item.width ?? 1;
+  const depthFt = item.dimensions?.depthFt ?? item.height ?? 1;
+
+  return (
+    <>
+      <Rect
+        width={size.width}
+        height={size.height}
+        fill={invalidItemId === item.instanceId ? "#fee2e2" : "#ffffff"}
+        stroke={invalidItemId === item.instanceId ? "#ef4444" : item.color}
+        strokeWidth={2}
+        cornerRadius={6}
+        opacity={item.locked ? 0.65 : 1}
+      />
+
+      {hasClearanceWarning && (
+        <Rect
+          x={-3}
+          y={-3}
+          width={size.width + 6}
+          height={size.height + 6}
+          stroke="#f97316"
+          strokeWidth={3}
+          dash={[8, 5]}
+          cornerRadius={8}
+        />
+      )}
+
+      <Text
+        text={item.name}
+        x={6}
+        y={8}
+        fontSize={11}
+        fill="#111827"
+        fontStyle="bold"
+        width={size.width - 12}
+      />
+
+      <Text
+        text={`${widthFt}ft x ${depthFt}ft`}
+        x={6}
+        y={size.height - 20}
+        fontSize={10}
+        fill="#6b7280"
+        width={size.width - 12}
+      />
+
+      {item.locked && (
+        <Text
+          text="🔒"
+          x={size.width - 22}
+          y={6}
+          fontSize={14}
+          fill="#111827"
+        />
+      )}
+
+      {isSelected && (
+        <>
+          <Rect
+            x={-4}
+            y={-4}
+            width={size.width + 8}
+            height={size.height + 8}
+            stroke="#111827"
+            strokeWidth={2}
+            dash={[6, 4]}
+          />
+
+          <Circle x={0} y={0} radius={5} fill="#111827" />
+          <Circle x={size.width} y={0} radius={5} fill="#111827" />
+          <Circle x={0} y={size.height} radius={5} fill="#111827" />
+          <Circle x={size.width} y={size.height} radius={5} fill="#111827" />
+        </>
+      )}
+    </>
+  );
+}
+
 
 function App() {
   const [selectedBooth, setSelectedBooth] = useState(BOOTH_SIZES[0]);
   const [zoom, setZoom] = useState(1);
+  const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [canvasTool, setCanvasTool] = useState("select");
+  const [showFlowHeatmap, setShowFlowHeatmap] = useState(false);
   const [items, setItems] = useState([]);
   const [history, setHistory] = useState([]);
   const [future, setFuture] = useState([]);
   const [selectedItemId, setSelectedItemId] = useState(null);
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [message, setMessage] = useState("");
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [accessoryQty, setAccessoryQty] = useState({});
   const [savedDesigns, setSavedDesigns] = useState(() => {
     return JSON.parse(localStorage.getItem("boothDesigns") || "[]");
   });
+  const [showLeadCapture, setShowLeadCapture] = useState(false);
+  const [leadCaptured, setLeadCaptured] = useState(false);
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [leadError, setLeadError] = useState("");
+  const [leadForm, setLeadForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+  });
+  const [isSmallScreen, setIsSmallScreen] = useState(
+  window.innerWidth < 1100
+  );
+  const [onlineSaveUrl, setOnlineSaveUrl] = useState("");
+  const [onlineSaving, setOnlineSaving] = useState(false);
+  const [loadedFromSupabase, setLoadedFromSupabase] = useState(false);
   const [finalWindowOpen, setFinalWindowOpen] = useState(false);
   const [boothType, setBoothType] = useState("Not Specified");
   const [adjacentAreas, setAdjacentAreas] = useState(
@@ -146,6 +343,13 @@ function App() {
   const [layoutSnapshot, setLayoutSnapshot] = useState("");
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [invalidItemId, setInvalidItemId] = useState(null);
+  const [alignmentGuides, setAlignmentGuides] = useState([]);
+  const [spacingGuides, setSpacingGuides] = useState([]);
+  const [selectionBox, setSelectionBox] = useState(null);
+  const previousBoothOriginRef = useRef(null);
+  const panStartRef = useRef(null);
+  const groupDragStartRef = useRef(null);
+  const selectionStartRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({
     width: 900,
     height: 650,
@@ -157,30 +361,291 @@ function App() {
   const stageWidth = Math.max(canvasSize.width, boothPixelWidth + 240);
   const stageHeight = Math.max(canvasSize.height, boothPixelHeight + 220);
 
-const boothX = Math.max(120, (stageWidth - boothPixelWidth) / 2);
-const boothY = Math.max(120, (stageHeight - boothPixelHeight) / 2);
+  const boothX = Math.max(120, (stageWidth - boothPixelWidth) / 2);
+  const boothY = Math.max(120, (stageHeight - boothPixelHeight) / 2);
 
   const ADJACENT_BAR_WIDTH = 34;
   const ADJACENT_GAP = 10;
 
+  const activeCanvasTool = isSpacePressed ? "pan" : canvasTool;
   const selectedItem = items.find((item) => item.instanceId === selectedItemId);
 
-  const showMessage = (text) => {
-    setMessage(text);
-    setTimeout(() => setMessage(""), 2500);
+  const selectedItems = items.filter((item) =>
+    selectedItemIds.includes(item.instanceId)
+  );
+
+const hasMultiSelection = selectedItemIds.length > 1;
+  const getPointerInCanvas = () => {
+    const stage = stageRef.current;
+
+    if (!stage) return null;
+
+    const pointer = stage.getPointerPosition();
+
+    if (!pointer) return null;
+
+    return {
+      x: (pointer.x - canvasPan.x) / zoom,
+      y: (pointer.y - canvasPan.y) / zoom,
+    };
   };
+
+
+  const handleCanvasMouseDown = (e) => {
+    const stage = e.target.getStage();
+
+    const clickedOnStage = e.target === stage;
+    const clickedOnBackground = e.target.name() === "canvas-background";
+
+    if (!clickedOnStage && !clickedOnBackground) return;
+
+    if (activeCanvasTool === "pan") {
+      setSelectedItemId(null);
+      setSelectedItemIds([]);
+      setIsPanning(true);
+
+      panStartRef.current = {
+        pointer: stage.getPointerPosition(),
+        pan: canvasPan,
+      };
+
+      return;
+    }
+
+    const pointer = getPointerInCanvas();
+
+    if (!pointer) return;
+
+    const isMultiSelect = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey;
+
+    if (!isMultiSelect) {
+      clearSelection();
+    }
+
+    selectionStartRef.current = {
+      x: pointer.x,
+      y: pointer.y,
+      additive: isMultiSelect,
+    };
+
+    setSelectionBox({
+      x: pointer.x,
+      y: pointer.y,
+      width: 0,
+      height: 0,
+    });
+
+    setIsPanning(false);
+  };
+
+  const handleCanvasMouseMove = () => {
+    if (isPanning && panStartRef.current) {
+      const stage = stageRef.current;
+      const pointer = stage?.getPointerPosition();
+
+      if (!pointer || !panStartRef.current.pointer) return;
+
+      const dx = pointer.x - panStartRef.current.pointer.x;
+      const dy = pointer.y - panStartRef.current.pointer.y;
+
+      setCanvasPan({
+        x: panStartRef.current.pan.x + dx,
+        y: panStartRef.current.pan.y + dy,
+      });
+
+      return;
+    }
+
+    if (!selectionStartRef.current) return;
+
+    const pointer = getPointerInCanvas();
+
+    if (!pointer) return;
+
+    const start = selectionStartRef.current;
+
+    setSelectionBox({
+      x: Math.min(start.x, pointer.x),
+      y: Math.min(start.y, pointer.y),
+      width: Math.abs(pointer.x - start.x),
+      height: Math.abs(pointer.y - start.y),
+    });
+  };
+
+ const handleCanvasMouseUp = () => {
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+      return;
+    }
+
+    if (!selectionStartRef.current || !selectionBox) {
+      setSelectionBox(null);
+      selectionStartRef.current = null;
+      return;
+    }
+
+    const box = selectionBox;
+
+    const selectedInBox = items.filter((item) => {
+      const size = getItemPixelSize(item);
+
+      const itemLeft = item.x;
+      const itemRight = item.x + size.width;
+      const itemTop = item.y;
+      const itemBottom = item.y + size.height;
+
+      const boxLeft = box.x;
+      const boxRight = box.x + box.width;
+      const boxTop = box.y;
+      const boxBottom = box.y + box.height;
+
+      return (
+        itemLeft >= boxLeft &&
+        itemRight <= boxRight &&
+        itemTop >= boxTop &&
+        itemBottom <= boxBottom
+      );
+    });
+
+    const selectedIds = selectedInBox.map((item) => item.instanceId);
+
+    if (selectionStartRef.current.additive) {
+      setSelectedItemIds((prev) => {
+        const merged = Array.from(new Set([...prev, ...selectedIds]));
+        setSelectedItemId(merged[merged.length - 1] || null);
+        return merged;
+      });
+    } else {
+      setSelectedItemIds(selectedIds);
+      setSelectedItemId(selectedIds[selectedIds.length - 1] || null);
+    }
+
+    setSelectionBox(null);
+    selectionStartRef.current = null;
+    setIsPanning(false);
+    panStartRef.current = null;
+  };
+
+  const handleWheelZoom = (e) => {
+    e.evt.preventDefault();
+
+    const stage = stageRef.current;
+
+    if (!stage) return;
+
+    const oldScale = zoom;
+
+    const pointer = stage.getPointerPosition();
+
+    if (!pointer) return;
+
+    const mousePointTo = {
+      x: (pointer.x - canvasPan.x) / oldScale,
+      y: (pointer.y - canvasPan.y) / oldScale,
+    };
+
+    const direction = e.evt.deltaY > 0 ? -1 : 1;
+
+    let newScale =
+      direction > 0 ? oldScale * ZOOM_STEP : oldScale / ZOOM_STEP;
+
+    newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
+
+    const newPan = {
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    };
+
+    setZoom(newScale);
+    setCanvasPan(newPan);
+  };
+
+    const getCenteredCanvasPan = (targetZoom = 1) => {
+      if (!canvasSize.width || !canvasSize.height) {
+        return { x: 0, y: 0 };
+      }
+
+      const boothCenterX = boothX + boothPixelWidth / 2;
+      const boothCenterY = boothY + boothPixelHeight / 2;
+
+      return {
+        x: canvasSize.width / 2 - boothCenterX * targetZoom,
+        y: canvasSize.height / 2 - boothCenterY * targetZoom,
+      };
+    };
+
+    const handleResetView = () => {
+      const nextZoom = 1;
+
+      setZoom(nextZoom);
+      setCanvasPan(getCenteredCanvasPan(nextZoom));
+    };
+
+    const handleSelectItem = (e, item) => {
+      const isMultiSelect = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey;
+
+      if (isMultiSelect) {
+        setSelectedItemIds((prev) => {
+          if (prev.includes(item.instanceId)) {
+            return prev.filter((id) => id !== item.instanceId);
+          }
+
+          return [...prev, item.instanceId];
+        });
+
+        setSelectedItemId(item.instanceId);
+        return;
+      }
+
+      setSelectedItemId(item.instanceId);
+      setSelectedItemIds([item.instanceId]);
+    };
+
+    const clearSelection = () => {
+      setSelectedItemId(null);
+      setSelectedItemIds([]);
+    };
+
+
+
+const trackEvent = (eventName, payload = {}) => {
+  console.log("TRACK EVENT:", eventName, payload);
+
+  if (window.gtag) {
+    window.gtag("event", eventName, payload);
+  }
+};
+
+const showMessage = (text) => {
+  setMessage(text);
+  setTimeout(() => setMessage(""), 2500);
+};
 
   const snapToGrid = (value) =>
     Math.round(value / FEET_TO_PIXEL) * FEET_TO_PIXEL;
 
-  const getItemPixelSize = (item) => {
-    const isRotated = Math.abs(item.rotation % 180) === 90;
+  const getItemRealDimensions = (item) => {
+    const widthFt = item.dimensions?.widthFt ?? item.width ?? 1;
+    const depthFt = item.dimensions?.depthFt ?? item.height ?? 1;
+    const heightFt = item.dimensions?.heightFt ?? 0;
 
     return {
-      width: (isRotated ? item.height : item.width) * FEET_TO_PIXEL,
-      height: (isRotated ? item.width : item.height) * FEET_TO_PIXEL,
+      widthFt,
+      depthFt,
+      heightFt,
     };
   };
+
+const getItemPixelSize = (item) => {
+  const realDimensions = getItemRealDimensions(item);
+  const isRotated = Math.abs((item.rotation || 0) % 180) === 90;
+
+  return {
+    width: (isRotated ? realDimensions.depthFt : realDimensions.widthFt) * FEET_TO_PIXEL,
+    height: (isRotated ? realDimensions.widthFt : realDimensions.depthFt) * FEET_TO_PIXEL,
+  };
+};
 
   const isOverlapping = (a, b) => {
     const aSize = getItemPixelSize(a);
@@ -242,6 +707,231 @@ const snapItemFullyInsideBooth = (item) => {
       boothY + boothPixelHeight - size.height
     ),
   };
+};
+
+const getAlignmentGuides = (movingItem, itemList = items) => {
+  const guides = [];
+
+  const movingSize = getItemPixelSize(movingItem);
+
+  const movingLeft = movingItem.x;
+  const movingRight = movingItem.x + movingSize.width;
+  const movingTop = movingItem.y;
+  const movingBottom = movingItem.y + movingSize.height;
+  const movingCenterX = movingItem.x + movingSize.width / 2;
+  const movingCenterY = movingItem.y + movingSize.height / 2;
+
+  let snappedX = movingItem.x;
+  let snappedY = movingItem.y;
+
+  itemList.forEach((other) => {
+    if (other.instanceId === movingItem.instanceId) return;
+
+    const otherSize = getItemPixelSize(other);
+
+    const otherLeft = other.x;
+    const otherRight = other.x + otherSize.width;
+    const otherTop = other.y;
+    const otherBottom = other.y + otherSize.height;
+    const otherCenterX = other.x + otherSize.width / 2;
+    const otherCenterY = other.y + otherSize.height / 2;
+
+    // LEFT ALIGN
+    if (Math.abs(movingLeft - otherLeft) < SNAP_THRESHOLD) {
+      snappedX = otherLeft;
+
+      guides.push({
+        type: "vertical",
+        x: otherLeft,
+      });
+    }
+
+    // RIGHT ALIGN
+    if (Math.abs(movingRight - otherRight) < SNAP_THRESHOLD) {
+      snappedX = otherRight - movingSize.width;
+
+      guides.push({
+        type: "vertical",
+        x: otherRight,
+      });
+    }
+
+    // CENTER X
+    if (Math.abs(movingCenterX - otherCenterX) < SNAP_THRESHOLD) {
+      snappedX = otherCenterX - movingSize.width / 2;
+
+      guides.push({
+        type: "vertical",
+        x: otherCenterX,
+      });
+    }
+
+    // TOP ALIGN
+    if (Math.abs(movingTop - otherTop) < SNAP_THRESHOLD) {
+      snappedY = otherTop;
+
+      guides.push({
+        type: "horizontal",
+        y: otherTop,
+      });
+    }
+
+    // BOTTOM ALIGN
+    if (Math.abs(movingBottom - otherBottom) < SNAP_THRESHOLD) {
+      snappedY = otherBottom - movingSize.height;
+
+      guides.push({
+        type: "horizontal",
+        y: otherBottom,
+      });
+    }
+
+    // CENTER Y
+    if (Math.abs(movingCenterY - otherCenterY) < SNAP_THRESHOLD) {
+      snappedY = otherCenterY - movingSize.height / 2;
+
+      guides.push({
+        type: "horizontal",
+        y: otherCenterY,
+      });
+    }
+  });
+
+  const snapToBoothEdges = isPartiallyInsideBooth(movingItem) || isInsideBooth(movingItem);
+
+  if (snapToBoothEdges) {
+    const boothLeft = boothX;
+    const boothRight = boothX + boothPixelWidth;
+    const boothTop = boothY;
+    const boothBottom = boothY + boothPixelHeight;
+
+    if (Math.abs(movingLeft - boothLeft) < SNAP_THRESHOLD) {
+      snappedX = boothLeft;
+      guides.push({
+        type: "vertical",
+        x: boothLeft,
+      });
+    }
+
+    if (Math.abs(movingRight - boothRight) < SNAP_THRESHOLD) {
+      snappedX = boothRight - movingSize.width;
+      guides.push({
+        type: "vertical",
+        x: boothRight,
+      });
+    }
+
+    if (Math.abs(movingTop - boothTop) < SNAP_THRESHOLD) {
+      snappedY = boothTop;
+      guides.push({
+        type: "horizontal",
+        y: boothTop,
+      });
+    }
+
+    if (Math.abs(movingBottom - boothBottom) < SNAP_THRESHOLD) {
+      snappedY = boothBottom - movingSize.height;
+      guides.push({
+        type: "horizontal",
+        y: boothBottom,
+      });
+    }
+  }
+
+  return {
+    x: snappedX,
+    y: snappedY,
+    guides,
+  };
+};
+
+const getSpacingGuides = (movingItem, itemList = items) => {
+  const guides = [];
+  const movingSize = getItemPixelSize(movingItem);
+
+  const movingLeft = movingItem.x;
+  const movingRight = movingItem.x + movingSize.width;
+  const movingTop = movingItem.y;
+  const movingBottom = movingItem.y + movingSize.height;
+
+  itemList.forEach((other) => {
+    if (other.instanceId === movingItem.instanceId) return;
+
+    const otherSize = getItemPixelSize(other);
+
+    const otherLeft = other.x;
+    const otherRight = other.x + otherSize.width;
+    const otherTop = other.y;
+    const otherBottom = other.y + otherSize.height;
+
+    const verticalOverlap =
+      movingBottom > otherTop && movingTop < otherBottom;
+
+    const horizontalOverlap =
+      movingRight > otherLeft && movingLeft < otherRight;
+
+    // Horizontal gap
+    if (verticalOverlap) {
+      let gap = null;
+      let x1 = null;
+      let x2 = null;
+      let y = null;
+
+      if (movingRight <= otherLeft) {
+        gap = otherLeft - movingRight;
+        x1 = movingRight;
+        x2 = otherLeft;
+        y = Math.max(movingTop, otherTop) + Math.abs(Math.min(movingBottom, otherBottom) - Math.max(movingTop, otherTop)) / 2;
+      } else if (otherRight <= movingLeft) {
+        gap = movingLeft - otherRight;
+        x1 = otherRight;
+        x2 = movingLeft;
+        y = Math.max(movingTop, otherTop) + Math.abs(Math.min(movingBottom, otherBottom) - Math.max(movingTop, otherTop)) / 2;
+      }
+
+      if (gap !== null && gap <= FEET_TO_PIXEL * 5) {
+        guides.push({
+          type: "horizontal-gap",
+          x1,
+          x2,
+          y,
+          label: `${Math.round(gap / FEET_TO_PIXEL)} ft gap`,
+        });
+      }
+    }
+
+    // Vertical gap
+    if (horizontalOverlap) {
+      let gap = null;
+      let y1 = null;
+      let y2 = null;
+      let x = null;
+
+      if (movingBottom <= otherTop) {
+        gap = otherTop - movingBottom;
+        y1 = movingBottom;
+        y2 = otherTop;
+        x = Math.max(movingLeft, otherLeft) + Math.abs(Math.min(movingRight, otherRight) - Math.max(movingLeft, otherLeft)) / 2;
+      } else if (otherBottom <= movingTop) {
+        gap = movingTop - otherBottom;
+        y1 = otherBottom;
+        y2 = movingTop;
+        x = Math.max(movingLeft, otherLeft) + Math.abs(Math.min(movingRight, otherRight) - Math.max(movingLeft, otherLeft)) / 2;
+      }
+
+      if (gap !== null && gap <= FEET_TO_PIXEL * 5) {
+        guides.push({
+          type: "vertical-gap",
+          x,
+          y1,
+          y2,
+          label: `${Math.round(gap / FEET_TO_PIXEL)} ft gap`,
+        });
+      }
+    }
+  });
+
+  return guides.slice(0, 3);
 };
 
 const hasCollision = (itemToCheck, itemList = items) => {
@@ -422,7 +1112,7 @@ const groupedBoothItems = useMemo(() => {
         category: item.category,
         price: item.price,
         color: item.color,
-        attribute: `${item.width}ft x ${item.height}ft`,
+        attribute: `${getItemRealDimensions(item).widthFt}ft W x ${getItemRealDimensions(item).depthFt}ft D x ${getItemRealDimensions(item).heightFt}ft H`,
         quantity: 0,
       };
     }
@@ -457,6 +1147,304 @@ const accessoriesTotal = selectedAccessories.reduce(
 );
 
 const grandTotal = boothTotal + accessoriesTotal;
+
+const boothAreaSqFt = selectedBooth.width * selectedBooth.height;
+
+const usedAreaSqFt = boothItems.reduce((sum, item) => {
+  const dimensions = getItemRealDimensions(item);
+  return sum + dimensions.widthFt * dimensions.depthFt;
+}, 0);
+
+const utilizationPercent =
+  boothAreaSqFt > 0 ? Math.round((usedAreaSqFt / boothAreaSqFt) * 100) : 0;
+
+const utilizationStatus =
+  utilizationPercent < 30
+    ? "Comfortable"
+    : utilizationPercent <=45
+    ? "Moderate"
+    : "Crowded";
+
+
+  const MIN_CLEARANCE_FT = 2;
+
+  const getClearanceWarnings = () => {
+    const warnings = [];
+
+    boothItems.forEach((itemA, indexA) => {
+      const sizeA = getItemPixelSize(itemA);
+
+      const leftA = itemA.x;
+      const rightA = itemA.x + sizeA.width;
+      const topA = itemA.y;
+      const bottomA = itemA.y + sizeA.height;
+
+      boothItems.forEach((itemB, indexB) => {
+        if (indexB <= indexA) return;
+
+        const sizeB = getItemPixelSize(itemB);
+
+        const leftB = itemB.x;
+        const rightB = itemB.x + sizeB.width;
+        const topB = itemB.y;
+        const bottomB = itemB.y + sizeB.height;
+
+        const verticalOverlap = bottomA > topB && topA < bottomB;
+        const horizontalOverlap = rightA > leftB && leftA < rightB;
+
+        if (verticalOverlap) {
+          const gapPx =
+            rightA <= leftB ? leftB - rightA : leftA >= rightB ? leftA - rightB : null;
+
+          if (
+            gapPx !== null &&
+            gapPx > 0 &&
+            gapPx < MIN_CLEARANCE_FT * FEET_TO_PIXEL
+          ) {
+            warnings.push(
+              `${itemA.name} and ${itemB.name} have less than ${MIN_CLEARANCE_FT} ft side clearance.`
+            );
+          }
+        }
+
+        if (horizontalOverlap) {
+          const gapPx =
+            bottomA <= topB ? topB - bottomA : topA >= bottomB ? topA - bottomB : null;
+
+          if (
+            gapPx !== null &&
+            gapPx > 0 &&
+            gapPx < MIN_CLEARANCE_FT * FEET_TO_PIXEL
+          ) {
+            warnings.push(
+              `${itemA.name} and ${itemB.name} have less than ${MIN_CLEARANCE_FT} ft front/back clearance.`
+            );
+          }
+        }
+      });
+    });
+
+    return warnings;
+  };
+
+const clearanceWarnings = getClearanceWarnings();
+
+const getClearanceProblemItemIds = () => {
+  const problemIds = new Set();
+
+  boothItems.forEach((itemA, indexA) => {
+    const sizeA = getItemPixelSize(itemA);
+
+    const leftA = itemA.x;
+    const rightA = itemA.x + sizeA.width;
+    const topA = itemA.y;
+    const bottomA = itemA.y + sizeA.height;
+
+    boothItems.forEach((itemB, indexB) => {
+      if (indexB <= indexA) return;
+
+      const sizeB = getItemPixelSize(itemB);
+
+      const leftB = itemB.x;
+      const rightB = itemB.x + sizeB.width;
+      const topB = itemB.y;
+      const bottomB = itemB.y + sizeB.height;
+
+      const verticalOverlap = bottomA > topB && topA < bottomB;
+      const horizontalOverlap = rightA > leftB && leftA < rightB;
+
+      if (verticalOverlap) {
+        const gapPx =
+          rightA <= leftB ? leftB - rightA : leftA >= rightB ? leftA - rightB : null;
+
+        if (
+          gapPx !== null &&
+          gapPx > 0 &&
+          gapPx < MIN_CLEARANCE_FT * FEET_TO_PIXEL
+        ) {
+          problemIds.add(itemA.instanceId);
+          problemIds.add(itemB.instanceId);
+        }
+      }
+
+      if (horizontalOverlap) {
+        const gapPx =
+          bottomA <= topB ? topB - bottomA : topA >= bottomB ? topA - bottomB : null;
+
+        if (
+          gapPx !== null &&
+          gapPx > 0 &&
+          gapPx < MIN_CLEARANCE_FT * FEET_TO_PIXEL
+        ) {
+          problemIds.add(itemA.instanceId);
+          problemIds.add(itemB.instanceId);
+        }
+      }
+    });
+  });
+
+  return problemIds;
+};
+
+const clearanceProblemItemIds = getClearanceProblemItemIds();
+
+const getPlacementSuggestions = () => {
+  const suggestions = [];
+
+  boothItems.forEach((item) => {
+    const size = getItemPixelSize(item);
+
+    const itemLeft = item.x;
+    const itemRight = item.x + size.width;
+    const itemTop = item.y;
+    const itemBottom = item.y + size.height;
+
+    const nearLeftWall = Math.abs(itemLeft - boothX) <= FEET_TO_PIXEL;
+    const nearRightWall =
+      Math.abs(itemRight - (boothX + boothPixelWidth)) <= FEET_TO_PIXEL;
+    const nearTopWall = Math.abs(itemTop - boothY) <= FEET_TO_PIXEL;
+    const nearBottomWall =
+      Math.abs(itemBottom - (boothY + boothPixelHeight)) <= FEET_TO_PIXEL;
+
+    const isHorizontal = size.width >= size.height;
+
+    const nearAnyWall = isHorizontal
+      ? nearTopWall || nearBottomWall
+      : nearLeftWall || nearRightWall;
+
+    if (item.placementRole === "wall_display" && !nearAnyWall) {
+      suggestions.push(
+        `${item.name} usually works best along a booth wall or edge.`
+      );
+    }
+
+    if (item.placementRole === "visitor_facing") {
+      const nearAisle =
+        (nearTopWall && adjacentAreas.top === "Aisle") ||
+        (nearRightWall && adjacentAreas.right === "Aisle") ||
+        (nearBottomWall && adjacentAreas.bottom === "Aisle") ||
+        (nearLeftWall && adjacentAreas.left === "Aisle");
+
+      if (!nearAisle) {
+        suggestions.push(
+          `${item.name} may work better near an aisle-facing side for visitor interaction.`
+        );
+      }
+    }
+  });
+
+  return suggestions;
+};
+
+const placementSuggestions = getPlacementSuggestions();
+
+const getFlowHeatmapZones = () => {
+  const zones = [];
+
+  const cellSize = FEET_TO_PIXEL * 2;
+
+  for (let y = boothY; y < boothY + boothPixelHeight; y += cellSize) {
+    for (let x = boothX; x < boothX + boothPixelWidth; x += cellSize) {
+      const cell = {
+        x,
+        y,
+        width: Math.min(cellSize, boothX + boothPixelWidth - x),
+        height: Math.min(cellSize, boothY + boothPixelHeight - y),
+      };
+
+      const overlappingItems = boothItems.filter((item) => {
+        const size = getItemPixelSize(item);
+
+        return !(
+          item.x + size.width <= cell.x ||
+          item.x >= cell.x + cell.width ||
+          item.y + size.height <= cell.y ||
+          item.y >= cell.y + cell.height
+        );
+      });
+
+      if (overlappingItems.length === 0) continue;
+
+      const intensity =
+        overlappingItems.length >= 2 ? "high" : "medium";
+
+      zones.push({
+        ...cell,
+        intensity,
+      });
+    }
+  }
+
+  return zones;
+};
+
+const flowHeatmapZones = getFlowHeatmapZones();
+const getBoothQualityScore = () => {
+  let score = 100;
+  const feedback = [];
+
+  if (items.length === 0) {
+    return {
+      score: 0,
+      status: "No layout yet",
+      feedback: ["Add booth products to generate a booth score."],
+    };
+  }
+
+  if (utilizationStatus === "Crowded") {
+    score -= 20;
+    feedback.push("Booth may feel crowded because floor usage is above 45%.");
+  } else if (utilizationStatus === "Moderate") {
+    score -= 8;
+    feedback.push("Booth usage is moderate. Keep enough open space for visitors.");
+  } else {
+    feedback.push("Good open floor space for visitor movement.");
+  }
+
+  if (clearanceWarnings.length > 0) {
+    score -= Math.min(25, clearanceWarnings.length * 10);
+    feedback.push("Some products have less than 2 ft clearance.");
+  } else {
+    feedback.push("Good spacing between booth items.");
+  }
+
+  if (placementSuggestions.length > 0) {
+    score -= Math.min(15, placementSuggestions.length * 6);
+    feedback.push("Some products may work better in a different position.");
+  } else {
+    feedback.push("Product placement looks appropriate.");
+  }
+
+  const highCongestionZones = flowHeatmapZones.filter(
+    (zone) => zone.intensity === "high"
+  );
+
+  if (highCongestionZones.length > 0) {
+    score -= Math.min(15, highCongestionZones.length * 5);
+    feedback.push("Some areas may reduce visitor flow or demo space.");
+  } else {
+    feedback.push("No major congestion zones detected.");
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const status =
+    score >= 85
+      ? "Excellent"
+      : score >= 70
+      ? "Good"
+      : score >= 50
+      ? "Needs Improvement"
+      : "Poor";
+
+  return {
+    score,
+    status,
+    feedback,
+  };
+};
+
+const boothQuality = getBoothQualityScore();
 
 const groupedByCategory = useMemo(() => {
   const grouped = {};
@@ -549,7 +1537,33 @@ const updateItemsWithHistory = (nextItems) => {
   setItems(nextItems);
 };
 
+const getProductById = (productId) => {
+  return SAMPLE_PRODUCTS.find((product) => product.id === productId);
+};
+
+const hasRequiredProductInBooth = (requiredProductId) => {
+  return items.some(
+    (item) =>
+      item.id === requiredProductId &&
+      (item.placement === "booth" || isInsideBooth(item))
+  );
+};
+
+const getDependentItems = (baseProductId) => {
+  return items.filter((item) => item.requiresProductId === baseProductId);
+};
+
 const handleAddItem = (product) => {
+  if (product.requiresProductId) {
+  const requiredProduct = getProductById(product.requiresProductId);
+
+  if (!hasRequiredProductInBooth(product.requiresProductId)) {
+    showMessage(
+      `${product.name} requires ${requiredProduct?.name || "another product"} to be added first.`
+    );
+    return;
+  }
+}
   const productItem = {
     ...product,
     rotation: 0,
@@ -584,8 +1598,81 @@ const handleAddItem = (product) => {
     placement: "booth",
   };
 
+  trackEvent("product_added", {
+    product_name: product.name,
+    product_category: product.category,
+    booth_size: selectedBooth.label,
+  });
+
   updateItemsWithHistory([...items, newItem]);
   setSelectedItemId(newItem.instanceId);
+  setSelectedItemIds([newItem.instanceId]);
+};
+
+const handleGroupDragStart = (item) => {
+  if (!selectedItemIds.includes(item.instanceId) || selectedItemIds.length <= 1) {
+    groupDragStartRef.current = null;
+    return;
+  }
+
+  groupDragStartRef.current = {
+    draggedItemId: item.instanceId,
+    startX: item.x,
+    startY: item.y,
+    items: items
+      .filter((it) => selectedItemIds.includes(it.instanceId))
+      .map((it) => ({
+        instanceId: it.instanceId,
+        x: it.x,
+        y: it.y,
+      })),
+  };
+};
+
+const handleGroupDragMove = (e, item) => {
+  if (!groupDragStartRef.current) return;
+
+  const dragState = groupDragStartRef.current;
+
+  if (dragState.draggedItemId !== item.instanceId) return;
+
+  const dx = e.target.x() - dragState.startX;
+  const dy = e.target.y() - dragState.startY;
+
+  setItems((prevItems) =>
+    prevItems.map((it) => {
+      const startItem = dragState.items.find(
+        (saved) => saved.instanceId === it.instanceId
+      );
+
+      if (!startItem) return it;
+
+      return {
+        ...it,
+        x: startItem.x + dx,
+        y: startItem.y + dy,
+      };
+    })
+  );
+};
+
+const handleGroupDragEnd = (e, item) => {
+  if (!groupDragStartRef.current) {
+    handleDragEnd(e, item);
+    return;
+  }
+
+  groupDragStartRef.current = null;
+
+  setAlignmentGuides([]);
+  setSpacingGuides([]);
+
+  setItems((prevItems) =>
+    prevItems.map((it) => ({
+      ...it,
+      placement: isInsideBooth(it) ? "booth" : "outer",
+    }))
+  );
 };
 
 const handleDragEnd = (e, item) => {
@@ -652,17 +1739,54 @@ if (isPartiallyInsideBooth(movedItem) && !isInsideBooth(movedItem)) {
 };
 
 const handleDelete = () => {
-  if (!selectedItem) return;
+  if (selectedItemIds.length === 0) return;
 
-  if (selectedItem.locked) {
-    showMessage("Unlock this item before deleting it");
+  const selectedSet = new Set(selectedItemIds);
+
+  const lockedSelectedItems = items.filter(
+    (item) => selectedSet.has(item.instanceId) && item.locked
+  );
+
+  if (lockedSelectedItems.length > 0) {
+    showMessage("Unlock selected items before deleting");
     return;
   }
 
-  updateItemsWithHistory(
-    items.filter((item) => item.instanceId !== selectedItemId)
+  const selectedProductIds = items
+    .filter((item) => selectedSet.has(item.instanceId))
+    .map((item) => item.id);
+
+  const dependentItems = items.filter(
+    (item) =>
+      item.requiresProductId &&
+      selectedProductIds.includes(item.requiresProductId) &&
+      !selectedSet.has(item.instanceId)
   );
-  setSelectedItemId(null);
+
+  let idsToDelete = [...selectedItemIds];
+
+  if (dependentItems.length > 0) {
+    const confirmed = window.confirm(
+      `Some selected items are required by ${dependentItems.length} dependent item${
+        dependentItems.length > 1 ? "s" : ""
+      }. Deleting them will also remove the dependent item${
+        dependentItems.length > 1 ? "s" : ""
+      }. Continue?`
+    );
+
+    if (!confirmed) return;
+
+    idsToDelete = [
+      ...idsToDelete,
+      ...dependentItems.map((item) => item.instanceId),
+    ];
+  }
+
+  updateItemsWithHistory(
+    items.filter((item) => !idsToDelete.includes(item.instanceId))
+  );
+
+  clearSelection();
 };
 
 const handleRotate = () => {
@@ -673,15 +1797,19 @@ const handleRotate = () => {
     return;
   }
 
-  const rotatedItem = {
-    ...selectedItem,
-    rotation: (selectedItem.rotation + 90) % 360,
-  };
+let rotatedItem = {
+  ...selectedItem,
+  rotation: (selectedItem.rotation + 90) % 360,
+};
 
-  if (!isInsideBooth(rotatedItem) || hasCollision(rotatedItem)) {
-    showMessage("Not Enough Space in Booth");
-    return;
-  }
+if (selectedItem.placement === "booth" || isInsideBooth(selectedItem)) {
+  rotatedItem = snapItemFullyInsideBooth(rotatedItem);
+}
+
+if (!isInsideBooth(rotatedItem) || hasCollision(rotatedItem)) {
+  showMessage("Not Enough Space in Booth");
+  return;
+}
 
   updateItemsWithHistory(
     items.map((item) =>
@@ -691,43 +1819,206 @@ const handleRotate = () => {
 };
 
 const handleDuplicate = () => {
-  if (!selectedItem) return;
+  if (selectedItemIds.length === 0) return;
 
-  const size = getItemPixelSize(selectedItem);
-  const candidate = {
-    ...selectedItem,
-    instanceId: Date.now(),
-    x: selectedItem.x + FEET_TO_PIXEL,
-    y: selectedItem.y + FEET_TO_PIXEL,
-    placement: selectedItem.placement || "booth",
-  };
+  const selectedSet = new Set(selectedItemIds);
+  const itemsToDuplicate = items.filter((item) =>
+    selectedSet.has(item.instanceId)
+  );
 
-  if (
-    candidate.x + size.width > boothX + boothPixelWidth ||
-    candidate.y + size.height > boothY + boothPixelHeight ||
-    hasCollision(candidate)
-  ) {
-    const position = findNearestFreeSpace(selectedItem);
-    if (!position) {
-      showMessage("Not Enough Space in Booth");
+  const duplicatedItems = [];
+
+  for (const item of itemsToDuplicate) {
+    const candidate = {
+      ...item,
+      instanceId: Date.now() + Math.random(),
+      x: item.x + FEET_TO_PIXEL,
+      y: item.y + FEET_TO_PIXEL,
+      locked: false,
+      placement: item.placement || "booth",
+    };
+
+    if (!isInsideStage(candidate) || hasCollision(candidate, [...items, ...duplicatedItems])) {
+      showMessage("Not Enough Space to Duplicate Selected Items");
       return;
     }
 
-    candidate.x = position.x;
-    candidate.y = position.y;
+    duplicatedItems.push(candidate);
   }
 
-  updateItemsWithHistory([...items, candidate]);
-  setSelectedItemId(candidate.instanceId);
+  updateItemsWithHistory([...items, ...duplicatedItems]);
+
+  const newIds = duplicatedItems.map((item) => item.instanceId);
+
+  setSelectedItemId(newIds[newIds.length - 1]);
+  setSelectedItemIds(newIds);
 };
 
+const getSelectedLayoutItems = () => {
+  const selectedSet = new Set(selectedItemIds);
+
+  return items.filter((item) => selectedSet.has(item.instanceId));
+};
+
+const handleAlignSelected = (type) => {
+  const selectedLayoutItems = getSelectedLayoutItems();
+
+  if (selectedLayoutItems.length < 2) {
+    showMessage("Select at least two items to align");
+    return;
+  }
+
+  const itemBounds = selectedLayoutItems.map((item) => {
+    const size = getItemPixelSize(item);
+
+    return {
+      ...item,
+      widthPx: size.width,
+      heightPx: size.height,
+      left: item.x,
+      right: item.x + size.width,
+      top: item.y,
+      bottom: item.y + size.height,
+      centerX: item.x + size.width / 2,
+      centerY: item.y + size.height / 2,
+    };
+  });
+
+  const minLeft = Math.min(...itemBounds.map((item) => item.left));
+  const maxRight = Math.max(...itemBounds.map((item) => item.right));
+  const minTop = Math.min(...itemBounds.map((item) => item.top));
+  const maxBottom = Math.max(...itemBounds.map((item) => item.bottom));
+
+  const centerX = (minLeft + maxRight) / 2;
+  const centerY = (minTop + maxBottom) / 2;
+
+  const updatedItems = items.map((item) => {
+    const bound = itemBounds.find((entry) => entry.instanceId === item.instanceId);
+
+    if (!bound) return item;
+
+    if (item.locked) return item;
+
+    if (type === "left") {
+      return { ...item, x: minLeft };
+    }
+
+    if (type === "center") {
+      return { ...item, x: centerX - bound.widthPx / 2 };
+    }
+
+    if (type === "right") {
+      return { ...item, x: maxRight - bound.widthPx };
+    }
+
+    if (type === "top") {
+      return { ...item, y: minTop };
+    }
+
+    if (type === "middle") {
+      return { ...item, y: centerY - bound.heightPx / 2 };
+    }
+
+    if (type === "bottom") {
+      return { ...item, y: maxBottom - bound.heightPx };
+    }
+
+    return item;
+  });
+
+  updateItemsWithHistory(updatedItems);
+};
+
+const handleDistributeSelected = (direction) => {
+  const selectedLayoutItems = getSelectedLayoutItems().filter((item) => !item.locked);
+
+  if (selectedLayoutItems.length < 3) {
+    showMessage("Select at least three unlocked items to distribute");
+    return;
+  }
+
+  const itemBounds = selectedLayoutItems.map((item) => {
+    const size = getItemPixelSize(item);
+
+    return {
+      ...item,
+      widthPx: size.width,
+      heightPx: size.height,
+      left: item.x,
+      right: item.x + size.width,
+      top: item.y,
+      bottom: item.y + size.height,
+    };
+  });
+
+  if (direction === "horizontal") {
+    const sorted = [...itemBounds].sort((a, b) => a.left - b.left);
+
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+
+    const availableSpace =
+      last.left - first.left;
+
+    const step = availableSpace / (sorted.length - 1);
+
+    const updatedItems = items.map((item) => {
+      const index = sorted.findIndex((entry) => entry.instanceId === item.instanceId);
+
+      if (index === -1) return item;
+
+      return {
+        ...item,
+        x: first.left + step * index,
+      };
+    });
+
+    updateItemsWithHistory(updatedItems);
+    return;
+  }
+
+  if (direction === "vertical") {
+    const sorted = [...itemBounds].sort((a, b) => a.top - b.top);
+
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+
+    const availableSpace =
+      last.top - first.top;
+
+    const step = availableSpace / (sorted.length - 1);
+
+    const updatedItems = items.map((item) => {
+      const index = sorted.findIndex((entry) => entry.instanceId === item.instanceId);
+
+      if (index === -1) return item;
+
+      return {
+        ...item,
+        y: first.top + step * index,
+      };
+    });
+
+    updateItemsWithHistory(updatedItems);
+  }
+};
+
+
 const handleToggleLock = () => {
-  if (!selectedItem) return;
+  if (selectedItemIds.length === 0) return;
+
+  const selectedSet = new Set(selectedItemIds);
+
+  const selectedItemsForLock = items.filter((item) =>
+    selectedSet.has(item.instanceId)
+  );
+
+  const shouldLock = selectedItemsForLock.some((item) => !item.locked);
 
   updateItemsWithHistory(
     items.map((item) =>
-      item.instanceId === selectedItem.instanceId
-        ? { ...item, locked: !item.locked }
+      selectedSet.has(item.instanceId)
+        ? { ...item, locked: shouldLock }
         : item
     )
   );
@@ -750,27 +2041,386 @@ const handleOpenFinalWindow = () => {
     setLayoutSnapshot(dataUrl);
   }
 
+  trackEvent("final_summary_opened", {
+    booth_size: selectedBooth.label,
+    booth_score: boothQuality.score,
+    total_items: groupedBoothItems.length,
+  });
   setFinalWindowOpen(true);
 };
 
-const handleDownloadPDF = () => {
-  if (!finalContentRef.current) return;
+const handleLeadInputChange = (e) => {
+  const { name, value } = e.target;
 
-  const options = {
-    margin: 0.35,
-    filename: "printdrill-booth-summary.pdf",
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-    },
-    jsPDF: {
-      unit: "in",
-      format: "letter",
-      orientation: "portrait",
-    },
-  };
-  html2pdf().set(options).from(finalContentRef.current).save();
+  setLeadForm((prev) => ({
+    ...prev,
+    [name]: value,
+  }));
+
+  setLeadError("");
+};
+
+const handleDownloadButtonClick = () => {
+  if (!leadCaptured) {
+    setShowLeadCapture(true);
+    return;
+  }
+
+  handleDownloadPDF();
+};
+
+const handleLeadSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!leadForm.name.trim()) {
+    setLeadError("Please enter your name.");
+    return;
+  }
+
+  if (!leadForm.email.trim()) {
+    setLeadError("Please enter your email.");
+    return;
+  }
+
+  setLeadSaving(true);
+  setLeadError("");
+
+  let designLinkForLead = onlineSaveUrl || "";
+
+  try {
+    if (!designLinkForLead) {
+    const createdLink = await createOnlineDesignLink(
+      leadForm.company || leadForm.name || "Booth Design"
+    );
+
+    if (createdLink) {
+      designLinkForLead = createdLink;
+      setOnlineSaveUrl(createdLink);
+      console.log("Auto-created design link:", createdLink);
+    } else {
+      designLinkForLead = window.location.href;
+      console.warn("Design link was not created. Using current page URL.");
+    }
+  }
+
+    const payload = {
+      name: leadForm.name,
+      email: leadForm.email,
+      phone: leadForm.phone,
+      company: leadForm.company,
+      booth_size: selectedBooth.label,
+      booth_type: boothType,
+      booth_score: boothQuality.score,
+      utilization_percent: utilizationPercent,
+      total_estimate: grandTotal,
+      total_items: groupedBoothItems.length,
+      design_link: designLinkForLead,
+      created_at: new Date().toISOString(),
+    };
+
+    console.log("Saving lead payload:", payload);
+
+    const { error } = await supabase
+      .from("booth_leads")
+      .insert([payload]);
+
+    if (error) {
+      console.error("Lead save failed:", error);
+      setLeadError("Lead save failed. Please check Supabase.");
+      return;
+    }
+
+    trackEvent("lead_submitted", {
+      booth_size: selectedBooth.label,
+      booth_score: boothQuality.score,
+      total_estimate: grandTotal,
+    });
+    setLeadCaptured(true);
+    setShowLeadCapture(false);
+
+    setTimeout(() => {
+      handleDownloadPDF();
+    }, 120);
+  } catch (error) {
+    console.error("Lead submit failed:", error);
+    setLeadError("Something failed while saving. Please check console.");
+  } finally {
+    setLeadSaving(false);
+  }
+};
+
+const handleDownloadPDF = async () => {
+  try {
+    trackEvent("pdf_download_started", {
+      booth_size: selectedBooth.label,
+      booth_score: boothQuality.score,
+      total_estimate: grandTotal,
+    });
+    if (!stageRef.current) {
+      alert("PDF could not be generated because the canvas is not ready.");
+      return;
+    }
+
+    const boothImage = stageRef.current.toDataURL({
+      pixelRatio: 2,
+      mimeType: "image/png",
+    });
+
+    const quoteItems = groupedBoothItems;
+    const quoteTotal = boothTotal;
+    const designLinkForPdf = onlineSaveUrl || "Design link will be available after online save.";
+    const today = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const categorySections = Object.entries(groupedByCategory)
+      .map(([category, categoryItems]) => {
+        const rows = categoryItems
+          .map(
+            (item) => `
+              <tr>
+                <td>
+                  <strong>${item.name}</strong>
+                </td>
+                <td>${item.attribute || "Default"}</td>
+                <td>${item.quantity}</td>
+                <td>$${item.price * item.quantity}</td>
+                <td></td>
+                <td></td>
+              </tr>
+            `
+          )
+          .join("");
+
+        return `
+          <div class="pd-pdf-category">
+            <h3>${category}</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Attribute</th>
+                  <th>Qty</th>
+                  <th>Estimate Price</th>
+                  <th>Quote Price</th>
+                  <th>% Discount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        `;
+      })
+      .join("");
+
+    const pdfContainer = document.createElement("div");
+
+    pdfContainer.style.position = "absolute";
+    pdfContainer.style.left = "0";
+    pdfContainer.style.top = "0";
+    pdfContainer.style.width = "8.5in";
+    pdfContainer.style.background = "#ffffff";
+    pdfContainer.style.zIndex = "-1";
+    pdfContainer.style.pointerEvents = "none";
+
+    pdfContainer.innerHTML = `
+      <div class="pd-pdf-page">
+        <div class="pd-pdf-header">
+          <div>
+            <h1>Trade Show Booth Quote Summary</h1>
+            <p>Generated by PrintDrill Booth Designer</p>
+          </div>
+
+          <div class="pd-pdf-brand-box">
+            <strong>PrintDrill</strong>
+            <span>Custom Trade Show Displays</span>
+          </div>
+        </div>
+
+        <div class="pd-pdf-meta-grid">
+          <div>
+            <span>Booth Size</span>
+            <strong>${selectedBooth.label} ft</strong>
+          </div>
+
+          <div>
+            <span>Booth Type</span>
+            <strong>${boothType || "Not Specified"}</strong>
+          </div>
+
+          <div>
+            <span>Quote Items</span>
+            <strong>${quoteItems.length}</strong>
+          </div>
+
+          <div>
+            <span>Date</span>
+            <strong>${today}</strong>
+          </div>
+        </div>
+
+        <div class="pd-pdf-section">
+          <div class="pd-pdf-section-title">
+            <h2>Booth Layout</h2>
+            <span>Top-view planning snapshot</span>
+          </div>
+
+          <div class="pd-pdf-layout-box">
+            <img src="${boothImage}" />
+          </div>
+        </div>
+
+        <div class="pd-pdf-section">
+          <div class="pd-pdf-section-title">
+            <h2>Booth Components</h2>
+            <span>Only items placed inside the booth are included below</span>
+          </div>
+
+          ${
+            categorySections ||
+            `<p class="pd-pdf-muted">No booth components added yet.</p>`
+          }
+        </div>
+
+        <div class="pd-pdf-score-section">
+            <div>
+              <span>Booth Quality Score</span>
+              <strong>${boothQuality.score}/100</strong>
+            </div>
+
+            <div>
+              <span>Status</span>
+              <strong>${boothQuality.status}</strong>
+            </div>
+          </div>
+
+          <div class="pd-pdf-score-notes">
+            ${boothQuality.feedback
+              .slice(0, 4)
+              .map((note) => `<p>${note}</p>`)
+              .join("")}
+        </div>
+
+        <div class="pd-pdf-utilization">
+          <div>
+            <span>Booth Space Used</span>
+            <strong>${utilizationPercent}%</strong>
+          </div>
+
+          ${
+            utilizationStatus === "Crowded"
+               ? `
+                 <div class="pd-pdf-warning-box">
+                   <strong>Layout Warning</strong>
+                   <p>
+                     This booth uses more than 45% of available floor space. It may limit visitor
+                     movement, product demos, or lead capture space.
+                   </p>
+                 </div>
+               `
+              : ""
+          }
+
+          ${
+            clearanceWarnings.length > 0
+              ? `
+                <div class="pd-pdf-warning-box">
+                  <strong>Clearance Warning</strong>
+                  <p>${clearanceWarnings[0]}</p>
+                </div>
+              `
+              : ""
+          }
+
+          ${
+            placementSuggestions.length > 0
+              ? `
+                <div class="pd-pdf-suggestion-box">
+                  <strong>Placement Suggestion</strong>
+                  <p>${placementSuggestions[0]}</p>
+                </div>
+              `
+              : ""
+          }
+
+          <div>
+            <span>Used Area</span>
+            <strong>${usedAreaSqFt} sq ft</strong>
+          </div>
+
+          <div>
+            <span>Total Booth Area</span>
+            <strong>${boothAreaSqFt} sq ft</strong>
+          </div>
+
+          <div>
+            <span>Status</span>
+            <strong>${utilizationStatus}</strong>
+          </div>
+        </div>
+
+        <div class="pd-pdf-total-section">
+          <div>
+            <span>Total Estimate</span>
+            <strong>$${quoteTotal}</strong>
+          </div>
+
+          <div>
+            <span>Quote Price</span>
+            <strong class="pd-pdf-blank"></strong>
+          </div>
+
+          <div>
+            <span>Discount %</span>
+            <strong class="pd-pdf-blank"></strong>
+          </div>
+        </div>
+
+        <div class="pd-pdf-note-box">
+          <strong>Next Step</strong>
+          <p>
+            Send this booth layout PDF to hello@printdrill.com for a personalized quote,
+            design review, and product recommendation.
+          </p>
+
+          <div class="pd-pdf-design-link">
+            <strong>Online Design Link</strong>
+            <span>${designLinkForPdf}</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(pdfContainer);
+
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename: `printdrill-booth-quote-${Date.now()}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+        },
+        jsPDF: {
+          unit: "in",
+          format: "letter",
+          orientation: "portrait",
+        },
+      })
+      .from(pdfContainer.firstElementChild)
+      .save();
+
+    document.body.removeChild(pdfContainer);
+  } catch (error) {
+    console.error("PDF generation failed:", error);
+    alert("PDF generation failed. Please check the browser console.");
+  }
 };
 
 const handleUndo = () => {
@@ -781,7 +2431,7 @@ const handleUndo = () => {
   setFuture((prev) => [items, ...prev]);
   setItems(previousItems);
   setHistory((prev) => prev.slice(0, -1));
-  setSelectedItemId(null);
+  clearSelection();
 };
 
 const handleRedo = () => {
@@ -792,14 +2442,14 @@ const handleRedo = () => {
   setHistory((prev) => [...prev, items]);
   setItems(nextItems);
   setFuture((prev) => prev.slice(1));
-  setSelectedItemId(null);
+  clearSelection();
 };
 
 const handleClearAll = () => {
   if (items.length === 0) return;
 
   updateItemsWithHistory([]);
-  setSelectedItemId(null);
+  clearSelection();
 };
 
 const handleBoothTypeChange = (type) => {
@@ -834,6 +2484,128 @@ const handleAdjacentClick = (side) => {
   setBoothType("Not Specified");
 };
 
+const handleStartNewDesign = () => {
+  const confirmed = window.confirm(
+    "Start a new booth design? This will clear the current canvas."
+  );
+
+  if (!confirmed) return;
+
+  setItems([]);
+  setAccessoryQty({});
+  setSelectedItemId(null);
+  setSelectedItemIds([]);
+  setOnlineSaveUrl("");
+  setLoadedFromSupabase(false);
+  setHistory([]);
+  setFuture([]);
+
+  window.history.replaceState({}, "", window.location.pathname);
+
+  showMessage("Started a new booth design");
+};
+
+const handleEmailOnlineSaveUrl = () => {
+  if (!onlineSaveUrl) return;
+
+  const subject = encodeURIComponent("PrintDrill Booth Design Link");
+
+  const body = encodeURIComponent(
+    `Hi,\n\nHere is the booth design link:\n\n${onlineSaveUrl}\n\nThanks.`
+  );
+
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+};
+
+const handleCopyOnlineSaveUrl = async () => {
+  if (!onlineSaveUrl) return;
+
+  try {
+    await navigator.clipboard.writeText(onlineSaveUrl);
+    showMessage("Share link copied");
+  } catch (error) {
+    console.error("Copy failed:", error);
+    showMessage("Could not copy link");
+  }
+};
+
+const createOnlineDesignLink = async (
+  designName = "Booth Design"
+) => {
+
+  const payload = {
+    design_name: designName,
+    booth_size: selectedBooth,
+    booth_type: boothType,
+    adjacent_areas: adjacentAreas,
+    items,
+    accessory_qty: accessoryQty,
+    booth_score: boothQuality.score,
+    utilization_percent: utilizationPercent,
+    total_estimate: grandTotal,
+    created_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("booth_designs")
+    .insert([payload])
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("createOnlineDesignLink error:", error);
+    throw error;
+  }
+
+  console.log("createOnlineDesignLink success:", data);
+
+  return `${window.location.origin}${window.location.pathname}?design=${data.id}`;
+};
+
+const handleSaveDesignOnline = async () => {
+
+  if (items.length === 0 && Object.keys(accessoryQty).length === 0) {
+    showMessage("Add at least one item before saving online");
+    return;
+  }
+
+  const designName = window.prompt(
+    "Enter a name for this online booth design:"
+  );
+
+  if (!designName) return;
+
+  setOnlineSaving(true);
+  setOnlineSaveUrl("");
+
+  try {
+
+    const shareUrl = await createOnlineDesignLink(designName);
+
+    console.log("Saved online design URL:", shareUrl);
+
+    setOnlineSaveUrl(shareUrl);
+
+    await navigator.clipboard.writeText(shareUrl);
+    trackEvent("design_saved_online", {
+      booth_size: selectedBooth.label,
+      booth_score: boothQuality.score,
+      total_estimate: grandTotal,
+    });
+    showMessage("Online design link copied");
+
+  } catch (error) {
+
+    console.error("Online save failed:", error);
+
+    showMessage("Online save failed");
+
+  } finally {
+
+    setOnlineSaving(false);
+
+  }
+};
 
 const handleSaveDesign = () => {
   if (items.length === 0 && Object.keys(accessoryQty).length === 0) {
@@ -873,7 +2645,7 @@ const handleLoadDesign = (designId) => {
   setAdjacentAreas(design.adjacentAreas || BOOTH_TYPE_PRESETS["Not Specified"]);
   setItems(design.items || []);
   setAccessoryQty(design.accessoryQty || {});
-  setSelectedItemId(null);
+  clearSelection();
   setHistory([]);
   setFuture([]);
 
@@ -950,6 +2722,129 @@ useEffect(() => {
   return () => resizeObserver.disconnect();
 }, []);
 
+useEffect(() => {
+  if (!canvasSize.width || !canvasSize.height) return;
+
+  setCanvasPan(getCenteredCanvasPan(zoom));
+}, [canvasSize.width, canvasSize.height]);
+
+useEffect(() => {
+  if (!previousBoothOriginRef.current) {
+    previousBoothOriginRef.current = { x: boothX, y: boothY };
+    return;
+  }
+
+  const previous = previousBoothOriginRef.current;
+
+  const dx = boothX - previous.x;
+  const dy = boothY - previous.y;
+
+  if (dx === 0 && dy === 0) return;
+
+  setItems((prevItems) =>
+    prevItems.map((item) => ({
+      ...item,
+      x: item.x + dx,
+      y: item.y + dy,
+    }))
+  );
+
+  previousBoothOriginRef.current = { x: boothX, y: boothY };
+}, [boothX, boothY]);
+
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      setIsSpacePressed(true);
+    }
+  };
+
+  const handleKeyUp = (e) => {
+    if (e.code === "Space") {
+      setIsSpacePressed(false);
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
+
+  return () => {
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
+  };
+}, []);
+
+useEffect(() => {
+  const loadDesignFromUrl = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const designId = params.get("design");
+
+    if (!designId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("booth_designs")
+        .select("*")
+        .eq("id", designId)
+        .single();
+
+      if (error || !data) {
+        console.error("Design load failed:", error);
+        showMessage("Could not load shared design");
+        return;
+      }
+
+      setSelectedBooth(data.booth_size || BOOTH_SIZES[0]);
+      setBoothType(data.booth_type || "Not Specified");
+      setAdjacentAreas(
+        data.adjacent_areas || BOOTH_TYPE_PRESETS["Not Specified"]
+      );
+      setItems(data.items || []);
+      setAccessoryQty(data.accessory_qty || {});
+      clearSelection();
+      setHistory([]);
+      setFuture([]);
+      setLoadedFromSupabase(true);
+      showMessage("Shared design loaded from Supabase");
+    } catch (error) {
+      console.error("Shared design load failed:", error);
+      showMessage("Could not load shared design");
+    }
+  };
+
+  loadDesignFromUrl();
+}, []);
+
+useEffect(() => {
+
+  const handleResize = () => {
+    setIsSmallScreen(window.innerWidth < 1100);
+  };
+
+  window.addEventListener("resize", handleResize);
+
+  return () => {
+    window.removeEventListener("resize", handleResize);
+  };
+
+}, []);
+
+useEffect(() => {
+  trackEvent("booth_designer_loaded");
+
+  const sendHeartbeat = async () => {
+    try {
+      await supabase.from("app_heartbeat").insert({
+        source: "booth-designer-vercel",
+      });
+    } catch (error) {
+      console.log("Supabase heartbeat failed", error);
+    }
+  };
+
+  sendHeartbeat();
+}, []);
 
 return (
   <div className="app-shell">
@@ -965,10 +2860,26 @@ return (
       <h2>Trade Show Booth Designer</h2>
 
       <p className="panel-note">
-        Step 5: right panel item bucket, quantities, accessories, and total.
+        Plan your trade show booth layout, add display products, and download a booth proposal PDF for quote review.
       </p>
 
       {message && <div className="inline-message">{message}</div>}
+
+      {loadedFromSupabase && (
+        <div className="supabase-loaded-banner">
+          Loaded from shared Supabase design link
+        </div>
+      )}
+
+      {(loadedFromSupabase || onlineSaveUrl) && (
+        <button
+          type="button"
+          className="start-new-design-button"
+          onClick={handleStartNewDesign}
+        >
+          Start New Design
+        </button>
+      )}
 
       <label className="field-label">Booth Size</label>
       <select
@@ -981,7 +2892,11 @@ return (
 
             setSelectedBooth(booth);
             updateItemsWithHistory(updatedItems);
-            setSelectedItemId(null);
+            clearSelection();
+
+            requestAnimationFrame(() => {
+              setCanvasPan(getCenteredCanvasPan(zoom));
+            });
 
             if (overflowCount > 0) {
               showMessage(
@@ -1012,6 +2927,14 @@ return (
         ))}
       </select>
 
+
+      <div className="launch-info-box">
+        <strong>How it works</strong>
+        <span>1. Choose your booth size.</span>
+        <span>2. Add display products.</span>
+        <span>3. Arrange your layout.</span>
+        <span>4. Download your booth plan.</span>
+      </div>
 
       <div className="info-box">
         <strong>Selected Booth</strong>
@@ -1065,17 +2988,22 @@ return (
                   <div className="category-products">
                     {products.map((product) => (
                       <div className="product-card" key={product.id}>
-                        <div
-                          className="product-card-image"
-                          style={{ background: product.color }}
-                        />
+                        <div className="product-card-image">
+                          <img src={product.productImage} alt={product.name} />
+                        </div>
 
                         <div className="product-card-body">
                           <strong>{product.name}</strong>
                           <span>
-                            {product.width}ft x {product.height}ft
+                            {product.dimensions?.widthFt || product.width}ft W x{" "}
+                            {product.dimensions?.depthFt || product.height}ft D
                           </span>
                           <span>${product.price}</span>
+                          {product.requiresProductId && (
+                            <span>
+                              Requires: {getProductById(product.requiresProductId)?.name}
+                            </span>
+                          )}
                         </div>
 
                         <div className="product-card-actions">
@@ -1101,18 +3029,49 @@ return (
       </div>
 
 
+      {selectedItemIds.length >= 2 && (
+        <div className="alignment-tools">
+          <h3>Align Selected</h3>
+
+          <div className="alignment-grid">
+            <button onClick={() => handleAlignSelected("left")}>Left</button>
+            <button onClick={() => handleAlignSelected("center")}>Center</button>
+            <button onClick={() => handleAlignSelected("right")}>Right</button>
+            <button onClick={() => handleAlignSelected("top")}>Top</button>
+            <button onClick={() => handleAlignSelected("middle")}>Middle</button>
+            <button onClick={() => handleAlignSelected("bottom")}>Bottom</button>
+          </div>
+
+          <h3>Distribute</h3>
+
+          <div className="alignment-grid">
+            <button onClick={() => handleDistributeSelected("horizontal")}>
+              Horizontal
+            </button>
+            <button onClick={() => handleDistributeSelected("vertical")}>
+              Vertical
+            </button>
+          </div>
+        </div>
+      )}
+
+
+
       <div className="action-grid">
-        <button disabled={!selectedItem} onClick={handleRotate}>
+        <button disabled={selectedItemIds.length === 0} onClick={handleRotate}>
           Rotate
         </button>
-        <button disabled={!selectedItem} onClick={handleDuplicate}>
-          Duplicate
+
+        <button disabled={selectedItemIds.length === 0} onClick={handleDuplicate}>
+          {hasMultiSelection ? "Duplicate Group" : "Duplicate"}
         </button>
-        <button disabled={!selectedItem} onClick={handleToggleLock}>
-          {selectedItem?.locked ? "Unlock" : "Lock"}
+
+        <button disabled={selectedItemIds.length === 0} onClick={handleToggleLock}>
+          {hasMultiSelection ? "Lock / Unlock Group" : selectedItem?.locked ? "Unlock" : "Lock"}
         </button>
-        <button disabled={!selectedItem} onClick={handleDelete}>
-          Delete
+
+        <button disabled={selectedItemIds.length === 0} onClick={handleDelete}>
+          {hasMultiSelection ? "Delete Group" : "Delete"}
         </button>
       </div>
 
@@ -1140,6 +3099,41 @@ return (
         >
           Save Current Design
         </button>
+        
+        <button
+          className="save-online-button"
+          onClick={handleSaveDesignOnline}
+          disabled={
+            onlineSaving ||
+            (items.length === 0 && Object.keys(accessoryQty).length === 0)
+          }
+        >
+          {onlineSaving ? "Saving Online..." : "Save Online & Copy Link"}
+        </button>
+
+        {onlineSaveUrl && (
+          <div className="online-save-link-box">
+            <strong>Shareable Link</strong>
+
+            <input value={onlineSaveUrl} readOnly />
+
+            <button
+              type="button"
+              className="email-online-link-button"
+              onClick={handleEmailOnlineSaveUrl}
+            >
+              Email This Booth Plan
+            </button>
+
+            <button
+              type="button"
+              className="copy-online-link-button"
+              onClick={handleCopyOnlineSaveUrl}
+            >
+              Copy Link Again
+            </button>
+          </div>
+        )}
 
         {savedDesigns.length === 0 ? (
           <p className="saved-empty">No saved designs yet.</p>
@@ -1182,7 +3176,9 @@ return (
               <strong>{selectedItem.name}</strong>
 
               <span>
-                Size: {selectedItem.width} ft x {selectedItem.height} ft
+                Size: {getItemRealDimensions(selectedItem).widthFt} ft W x{" "}
+                {getItemRealDimensions(selectedItem).depthFt} ft D x{" "}
+                {getItemRealDimensions(selectedItem).heightFt} ft H
               </span>
 
               <span>Price: ${selectedItem.price}</span>
@@ -1204,47 +3200,119 @@ return (
       </div>
     </aside>
 
-    <main className="canvas-section">
-      <div className="toolbar">
-        <div>
-          <strong>Canvas</strong>
-          <span className="muted">1 square = 1 ft</span>
-        </div>
+            <main className="canvas-section">
+              <div className="toolbar">
+                <div className="planner-branding">
 
-        <button
-          className="done-button"
-          disabled={groupedBoothItems.length === 0}
-          onClick={handleOpenFinalWindow}
-        >
-          Done - Download Booth
-        </button>
+                  <div className="planner-brand-top">
 
-        <div className="zoom-controls">
-          <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
-            -
-          </button>
-          <span>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((z) => Math.min(2, z + 0.1))}>
-            +
-          </button>
-        </div>
-      </div>
+                    <strong>
+                      PrintDrill Booth Designer
+                    </strong>
 
-      <div className="canvas-wrap" ref={canvasWrapRef}>
-        <Stage
-          ref={stageRef}
-            width={stageWidth}
-            height={stageHeight}
-            scaleX={zoom}
-            scaleY={zoom}
-          onMouseDown={(e) => {
-            if (e.target === e.target.getStage()) {
-              setSelectedItemId(null);
-            }
-          }}
-        >
+                    <span className="planner-beta-tag">
+                      FREE TOOL
+                    </span>
+
+                  </div>
+
+                  <span className="muted">
+                    Plan your trade show booth layout and generate a professional proposal PDF.
+                  </span>
+
+                </div>
+
+                <button
+                  className="done-button"
+                  disabled={groupedBoothItems.length === 0}
+                  onClick={handleOpenFinalWindow}
+                >
+                  Done - Download Booth
+                </button>
+
+                  <div className="tool-mode-controls">
+                    <button
+                      className={canvasTool === "select" ? "active" : ""}
+                      onClick={() => setCanvasTool("select")}
+                    >
+                      Select
+                    </button>
+
+                    <button
+                      className={activeCanvasTool === "pan" ? "active" : ""}
+                      onClick={() => setCanvasTool("pan")}
+                    >
+                      Pan
+                    </button>
+                  </div>
+
+                  <div className="heatmap-toggle">
+                    <button
+                      className={showFlowHeatmap ? "active" : ""}
+                      onClick={() => setShowFlowHeatmap((value) => !value)}
+                    >
+                      Flow Heatmap
+                    </button>
+                  </div>
+
+                  <a
+                    className="planner-help-link"
+                    href="https://www.printdrill.com/pages/contact"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Need Booth Help?
+                  </a>
+
+
+                <div className="zoom-controls">
+                  <button
+                    onClick={() =>
+                      setZoom((z) => Math.max(MIN_ZOOM, +(z - 0.1).toFixed(2)))
+                    }
+                    >
+                    -
+                  </button>
+
+                  <span>{Math.round(zoom * 100)}%</span>
+
+                  <button
+                    onClick={() =>
+                      setZoom((z) => Math.min(MAX_ZOOM, +(z + 0.1).toFixed(2)))
+                    }
+                  >
+                    +
+                  </button>
+
+                  <button onClick={handleResetView}>
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className={`canvas-wrap ${
+                  activeCanvasTool === "pan" ? "pan-mode" : "select-mode"
+                } ${isPanning ? "is-panning" : ""}`}
+                ref={canvasWrapRef}
+              >
+                <Stage
+                  ref={stageRef}
+                  width={stageWidth}
+                  height={stageHeight}
+                  x={canvasPan.x}
+                  y={canvasPan.y}
+                  scaleX={zoom}
+                  scaleY={zoom}
+                  onWheel={handleWheelZoom}
+                  onMouseDown={handleCanvasMouseDown}
+                  onMouseMove={handleCanvasMouseMove}
+                  onMouseUp={handleCanvasMouseUp}
+                  onMouseLeave={handleCanvasMouseUp}
+            >
           <Layer>
             <Rect
+              name="canvas-background"
               x={0}
               y={0}
               width={stageWidth}
@@ -1389,6 +3457,23 @@ return (
 
               {gridLines}
               {measurementLabels}
+              {showFlowHeatmap &&
+                flowHeatmapZones.map((zone, index) => (
+                  <Rect
+                    key={`flow-zone-${index}`}
+                    x={zone.x}
+                    y={zone.y}
+                    width={zone.width}
+                    height={zone.height}
+                    fill={
+                      zone.intensity === "high"
+                        ? "rgba(239, 68, 68, 0.28)"
+                        : "rgba(245, 158, 11, 0.22)"
+                    }
+                    cornerRadius={6}
+                    listening={false}
+                  />
+                ))}
 
               <Text
                 text={`Booth Area: ${selectedBooth.label} ft`}
@@ -1407,9 +3492,93 @@ return (
                 fill="#6b7280"
               />
 
+              {selectionBox && (
+                <Rect
+                  x={selectionBox.x}
+                  y={selectionBox.y}
+                  width={selectionBox.width}
+                  height={selectionBox.height}
+                  fill="rgba(59, 130, 246, 0.12)"
+                  stroke="#3b82f6"
+                  strokeWidth={1}
+                  dash={[4, 4]}
+                />
+              )}
+
+              {alignmentGuides.map((guide, index) => {
+                if (guide.type === "vertical") {
+                  return (
+                    <Line
+                      key={`guide-v-${index}`}
+                      points={[guide.x, 0, guide.x, stageHeight]}
+                      stroke="#3b82f6"
+                      strokeWidth={1}
+                      dash={[6, 6]}
+                    />
+                  );
+                }
+
+                return (
+                  <Line
+                    key={`guide-h-${index}`}
+                    points={[0, guide.y, stageWidth, guide.y]}
+                    stroke="#3b82f6"
+                    strokeWidth={1}
+                    dash={[6, 6]}
+                  />
+                );
+              })}
+
+              {spacingGuides.map((guide, index) => {
+                if (guide.type === "horizontal-gap") {
+                  const midX = (guide.x1 + guide.x2) / 2;
+
+                  return (
+                    <Group key={`spacing-h-${index}`}>
+                      <Line
+                        points={[guide.x1, guide.y, guide.x2, guide.y]}
+                        stroke="#111827"
+                        strokeWidth={1}
+                        dash={[4, 4]}
+                      />
+                      <Text
+                        text={guide.label}
+                        x={midX - 24}
+                        y={guide.y - 18}
+                        fontSize={11}
+                        fill="#111827"
+                        fontStyle="bold"
+                      />
+                    </Group>
+                  );
+                }
+
+                const midY = (guide.y1 + guide.y2) / 2;
+
+                return (
+                  <Group key={`spacing-v-${index}`}>
+                    <Line
+                      points={[guide.x, guide.y1, guide.x, guide.y2]}
+                      stroke="#111827"
+                      strokeWidth={1}
+                      dash={[4, 4]}
+                    />
+                    <Text
+                      text={guide.label}
+                      x={guide.x + 6}
+                      y={midY - 6}
+                      fontSize={11}
+                      fill="#111827"
+                      fontStyle="bold"
+                    />
+                  </Group>
+                );
+              })}
+
+
               {items.map((item) => {
                 const size = getItemPixelSize(item);
-                const isSelected = item.instanceId === selectedItemId;
+                const isSelected = selectedItemIds.includes(item.instanceId);
 
                 return (
                   <Group
@@ -1423,53 +3592,56 @@ return (
                     }}
                     onMouseLeave={(e) => {
                       const container = e.target.getStage().container();
-                      container.style.cursor = "default";
+                      container.style.cursor = "grab";
                     }}
-                    onClick={() => setSelectedItemId(item.instanceId)}
-                    onTap={() => setSelectedItemId(item.instanceId)}
-                    onDragEnd={(e) => handleDragEnd(e, item)}
+                    onClick={(e) => handleSelectItem(e, item)}
+                    onTap={(e) => handleSelectItem(e, item)}
+                    onDragMove={(e) => {
+                      if (hasMultiSelection && selectedItemIds.includes(item.instanceId)) {
+                        handleGroupDragMove(e, item);
+                        return;
+                      }
+                      const movingItem = {
+                        ...item,
+                        x: e.target.x(),
+                        y: e.target.y(),
+                      };
+
+                      const snapped = getAlignmentGuides(movingItem, items);
+
+                      const snappedItem = {
+                        ...movingItem,
+                        x: snapped.x,
+                        y: snapped.y,
+                      };
+
+                      e.target.position({
+                        x: snapped.x,
+                        y: snapped.y,
+                      });
+
+                      setAlignmentGuides(snapped.guides);
+                      setSpacingGuides(getSpacingGuides(snappedItem, items));
+                    }}
+
+                    onDragStart={() => {
+                      setAlignmentGuides([]);
+                      setSpacingGuides([]);
+                      handleGroupDragStart(item);
+                    }}
+                    onDragEnd={(e) => {
+                      handleGroupDragEnd(e, item);
+                    }}
                   >
 
-                    <Rect
-                      width={size.width}
-                      height={size.height}
-                      fill={invalidItemId === item.instanceId ? "#ef4444" : item.color}
-                      cornerRadius={4}
-                      opacity={item.locked ? 0.65 : 0.9}
-                    />
+                  <BoothProduct
+                    item={item}
+                    size={size}
+                    isSelected={isSelected}
+                    invalidItemId={invalidItemId}
+                    hasClearanceWarning={clearanceProblemItemIds.has(item.instanceId)}
+                  />
 
-                    <Text
-                      text={`${item.name}${item.locked ? " 🔒" : ""}`}
-                      x={6}
-                      y={8}
-                      fontSize={12}
-                      fill="#ffffff"
-                      fontStyle="bold"
-                      width={size.width - 12}
-                    />
-
-                    {isSelected && (
-                      <>
-                        <Rect
-                          x={-4}
-                          y={-4}
-                          width={size.width + 8}
-                          height={size.height + 8}
-                          stroke="#111827"
-                          strokeWidth={2}
-                          dash={[6, 4]}
-                        />
-                        <Circle x={0} y={0} radius={5} fill="#111827" />
-                        <Circle x={size.width} y={0} radius={5} fill="#111827" />
-                        <Circle x={0} y={size.height} radius={5} fill="#111827" />
-                        <Circle
-                          x={size.width}
-                          y={size.height}
-                          radius={5}
-                          fill="#111827"
-                        />
-                      </>
-                    )}
                   </Group>
                 );
               })}
@@ -1539,6 +3711,84 @@ return (
           ))}
         </div>
 
+        <div className="booth-score-card">
+          <div className="booth-score-header">
+            <span>Booth Quality Score</span>
+            <strong>{boothQuality.score}/100</strong>
+          </div>
+
+          <div className="booth-score-bar">
+            <div
+              className={`booth-score-fill ${
+                boothQuality.score >= 85
+                  ? "excellent"
+                  : boothQuality.score >= 70
+                  ? "good"
+                  : boothQuality.score >= 50
+                  ? "needs-improvement"
+                  : "poor"
+              }`}
+              style={{ width: `${boothQuality.score}%` }}
+            />
+          </div>
+
+          <p>{boothQuality.status}</p>
+
+          <ul>
+            {boothQuality.feedback.slice(0, 3).map((note, index) => (
+              <li key={`score-note-${index}`}>{note}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="utilization-card">
+          <div className="utilization-header">
+            <span>Booth Space Used</span>
+            <strong>{utilizationPercent}%</strong>
+          </div>
+
+          <div className="utilization-bar">
+            <div
+              className={`utilization-fill ${
+                utilizationStatus === "Comfortable"
+                  ? "comfortable"
+                  : utilizationStatus === "Moderate"
+                  ? "moderate"
+                  : "crowded"
+              }`}
+              style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
+            />
+          </div>
+
+          <p>{utilizationStatus}</p>
+          {utilizationStatus === "Crowded" && (
+            <div className="crowded-warning">
+              This booth may feel crowded. Consider removing items or using a larger booth size.
+            </div>
+          )}
+          {clearanceWarnings.length > 0 && (
+            <div className="clearance-warning">
+              <strong>Clearance Warning</strong>
+              <span>{clearanceWarnings[0]}</span>
+            </div>
+          )}
+          {placementSuggestions.length > 0 && (
+            <div className="placement-suggestion">
+              <strong>Placement Suggestion</strong>
+              <span>{placementSuggestions[0]}</span>
+            </div>
+          )}
+        </div>
+        {showFlowHeatmap && flowHeatmapZones.length > 0 && (
+          <div className="flow-summary">
+            <strong>Visitor Flow Insight</strong>
+            <span>
+              Highlighted zones show areas where products may reduce open walking or demo space.
+            </span>
+          </div>
+        )}
+
+
         <div className="bucket-total">
           <div>
             <span>Booth Items</span>
@@ -1553,6 +3803,9 @@ return (
             <strong>${grandTotal}</strong>
           </div>
         </div>
+        <div className="estimate-disclaimer">
+          Estimate shown is for planning only. Final pricing will be confirmed after artwork, specifications, and design review.
+        </div>
 
         <button
           className="download-button"
@@ -1563,6 +3816,92 @@ return (
         </button>
       </div>
     </aside>
+    {showLeadCapture && (
+      <div className="lead-capture-overlay">
+        <div className="lead-capture-modal">
+
+          <button
+            className="lead-capture-close"
+            onClick={() => setShowLeadCapture(false)}
+          >
+            ×
+          </button>
+
+          <h2>Download Your Booth PDF</h2>
+
+          <p className="lead-capture-subtext">
+            Enter your details to generate your booth proposal PDF and receive expert booth setup recommendations.
+          </p>
+
+          <form
+            className="lead-capture-form"
+            onSubmit={handleLeadSubmit}
+          >
+
+            <label>
+              Name *
+              <input
+                type="text"
+                name="name"
+                value={leadForm.name}
+                onChange={handleLeadInputChange}
+                placeholder="Your name"
+              />
+            </label>
+
+            <label>
+              Email *
+              <input
+                type="email"
+                name="email"
+                value={leadForm.email}
+                onChange={handleLeadInputChange}
+                placeholder="you@example.com"
+              />
+            </label>
+
+            <label>
+              Phone
+              <input
+                type="text"
+                name="phone"
+                value={leadForm.phone}
+                onChange={handleLeadInputChange}
+                placeholder="Phone number"
+              />
+            </label>
+
+            <label>
+              Company
+              <input
+                type="text"
+                name="company"
+                value={leadForm.company}
+                onChange={handleLeadInputChange}
+                placeholder="Company name"
+              />
+            </label>
+
+            {leadError && (
+              <div className="lead-capture-error">
+                {leadError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="lead-capture-submit"
+              disabled={leadSaving}
+            >
+              {leadSaving
+                ? "Preparing PDF..."
+                : "Submit & Download PDF"}
+            </button>
+
+          </form>
+        </div>
+      </div>
+    )}
     {finalWindowOpen && (
       <div className="final-overlay">
         <div className="final-popup" ref={finalContentRef}>
@@ -1594,7 +3933,13 @@ return (
             </div>
 
             <div className="quote-message-card">
-              <button className="pdf-button pdf-hide" onClick={handleDownloadPDF}>
+              <button
+                className="final-download-btn"
+                onClick={() => {
+                  console.log("PDF button clicked");
+                  handleDownloadButtonClick();
+                }}
+              >
                 Download PDF
               </button>
               <p>
@@ -1658,6 +4003,70 @@ return (
               ))
             )}
           </section>
+
+          <section className="final-score-section">
+            <div>
+              <span>Booth Quality Score</span>
+              <strong>{boothQuality.score}/100</strong>
+            </div>
+
+            <div>
+              <span>Status</span>
+              <strong>{boothQuality.status}</strong>
+            </div>
+
+            <ul>
+              {boothQuality.feedback.slice(0, 4).map((note, index) => (
+                <li key={`final-score-note-${index}`}>{note}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="final-utilization">
+            <div>
+              <span>Booth Space Used</span>
+              <strong>{utilizationPercent}%</strong>
+            </div>
+
+            <div>
+              <span>Used Area</span>
+              <strong>{usedAreaSqFt} sq ft</strong>
+            </div>
+
+            <div>
+              <span>Total Booth Area</span>
+              <strong>{boothAreaSqFt} sq ft</strong>
+            </div>
+
+            <div>
+              <span>Status</span>
+              <strong>{utilizationStatus}</strong>
+            </div>
+          </section>
+
+          {utilizationStatus === "Crowded" && (
+            <div className="final-warning-box">
+              <strong>Layout Warning</strong>
+              <p>
+                This booth uses more than 45% of available floor space. It may limit visitor
+                movement, product demos, or lead capture space.
+              </p>
+            </div>
+          )}
+
+          {clearanceWarnings.length > 0 && (
+            <div className="final-warning-box">
+              <strong>Clearance Warning</strong>
+              <p>{clearanceWarnings[0]}</p>
+            </div>
+          )}
+
+          {placementSuggestions.length > 0 && (
+            <div className="final-suggestion-box">
+              <strong>Placement Suggestion</strong>
+              <p>{placementSuggestions[0]}</p>
+            </div>
+          )}
 
           <section className="final-summary">
             <div>
