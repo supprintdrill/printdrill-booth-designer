@@ -24,6 +24,22 @@ const SAMPLE_PRODUCTS = [
       depthFt: 1,
       heightFt: 8,
     },
+    attributes: [
+      {
+        label: "10ft",
+        widthFt: 10,
+        depthFt: 1,
+        heightFt: 8,
+        price: 120,
+      },
+      {
+        label: "20ft",
+        widthFt: 20,
+        depthFt: 1,
+        heightFt: 8,
+        price: 420,
+      },
+    ],
     placementRole: "wall_display",
     image:
     "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1200&auto=format&fit=crop",
@@ -186,6 +202,7 @@ const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2.5;
 const ZOOM_STEP = 1.08;
 const SNAP_THRESHOLD = 10;
+const OUTER_CANVAS_FT = 30;
 
 const useImageElement = (src) => {
   const [image, setImage] = useState(null);
@@ -223,11 +240,15 @@ function BoothProduct({
       <Rect
         width={size.width}
         height={size.height}
-        fill={invalidItemId === item.instanceId ? "#fee2e2" : "#ffffff"}
+        fill={invalidItemId === item.instanceId ? "#fee2e2" : "#f8fafc"}
         stroke={invalidItemId === item.instanceId ? "#ef4444" : item.color}
         strokeWidth={2}
         cornerRadius={6}
         opacity={item.locked ? 0.65 : 1}
+        shadowColor="rgba(15, 23, 42, 0.16)"
+        shadowBlur={8}
+        shadowOffset={{ x: 0, y: 4 }}
+        shadowOpacity={0.3}
       />
 
       {hasClearanceWarning && (
@@ -279,15 +300,15 @@ function BoothProduct({
             y={-4}
             width={size.width + 8}
             height={size.height + 8}
-            stroke="#111827"
+            stroke="#0169f5"
             strokeWidth={2}
             dash={[6, 4]}
           />
 
-          <Circle x={0} y={0} radius={5} fill="#111827" />
-          <Circle x={size.width} y={0} radius={5} fill="#111827" />
-          <Circle x={0} y={size.height} radius={5} fill="#111827" />
-          <Circle x={size.width} y={size.height} radius={5} fill="#111827" />
+          <Circle x={0} y={0} radius={5} fill="#0169f5" />
+          <Circle x={size.width} y={0} radius={5} fill="#0169f5" />
+          <Circle x={0} y={size.height} radius={5} fill="#0169f5" />
+          <Circle x={size.width} y={size.height} radius={5} fill="#0169f5" />
         </>
       )}
     </>
@@ -329,6 +350,7 @@ function App() {
   );
   const [onlineSaveUrl, setOnlineSaveUrl] = useState("");
   const [onlineSaving, setOnlineSaving] = useState(false);
+  const [sharePopoverOpen, setSharePopoverOpen] = useState(false);
   const [loadedFromSupabase, setLoadedFromSupabase] = useState(false);
   const [finalWindowOpen, setFinalWindowOpen] = useState(false);
   const [boothType, setBoothType] = useState("Not Specified");
@@ -336,6 +358,7 @@ function App() {
     BOOTH_TYPE_PRESETS["Not Specified"]
   );
   const [productSearch, setProductSearch] = useState("");
+  const [selectedProductAttributes, setSelectedProductAttributes] = useState({});
   const [collapsedCategories, setCollapsedCategories] = useState({});
   const stageRef = useRef(null);
   const finalContentRef = useRef(null);
@@ -358,11 +381,20 @@ function App() {
   const boothPixelWidth = selectedBooth.width * FEET_TO_PIXEL;
   const boothPixelHeight = selectedBooth.height * FEET_TO_PIXEL;
 
-  const stageWidth = Math.max(canvasSize.width, boothPixelWidth + 240);
-  const stageHeight = Math.max(canvasSize.height, boothPixelHeight + 220);
+  const outerCanvasPaddingPx = OUTER_CANVAS_FT * FEET_TO_PIXEL;
 
-  const boothX = Math.max(120, (stageWidth - boothPixelWidth) / 2);
-  const boothY = Math.max(120, (stageHeight - boothPixelHeight) / 2);
+  const stageWidth = Math.max(
+    canvasSize.width,
+    boothPixelWidth + outerCanvasPaddingPx * 2
+  );
+
+  const stageHeight = Math.max(
+    canvasSize.height,
+    boothPixelHeight + outerCanvasPaddingPx * 2
+  );
+
+  const boothX = outerCanvasPaddingPx;
+  const boothY = outerCanvasPaddingPx;
 
   const ADJACENT_BAR_WIDTH = 34;
   const ADJACENT_GAP = 10;
@@ -561,7 +593,29 @@ const hasMultiSelection = selectedItemIds.length > 1;
     setCanvasPan(newPan);
   };
 
-    const getCenteredCanvasPan = (targetZoom = 1) => {
+    const getSmartFitZoom = () => {
+      if (!canvasSize.width || !canvasSize.height) {
+        return 1;
+      }
+
+      const visiblePaddingX = 120;
+      const visiblePaddingY = 110;
+
+      const availableWidth = Math.max(300, canvasSize.width - visiblePaddingX);
+      const availableHeight = Math.max(300, canvasSize.height - visiblePaddingY);
+
+      const fitZoomX = availableWidth / boothPixelWidth;
+      const fitZoomY = availableHeight / boothPixelHeight;
+
+      const fitZoom = Math.min(fitZoomX, fitZoomY);
+
+      return Math.max(
+        MIN_ZOOM,
+        Math.min(fitZoom, 1.75)
+      );
+    };
+
+    const getCenteredCanvasPan = (targetZoom = zoom) => {
       if (!canvasSize.width || !canvasSize.height) {
         return { x: 0, y: 0 };
       }
@@ -575,11 +629,37 @@ const hasMultiSelection = selectedItemIds.length > 1;
       };
     };
 
-    const handleResetView = () => {
-      const nextZoom = 1;
+    const fitBoothToView = () => {
+      if (!canvasSize.width || !canvasSize.height) return;
+
+      const visiblePaddingX = 140;
+      const visiblePaddingY = 130;
+
+      const availableWidth = Math.max(300, canvasSize.width - visiblePaddingX);
+      const availableHeight = Math.max(300, canvasSize.height - visiblePaddingY);
+
+      const fitZoomX = availableWidth / boothPixelWidth;
+      const fitZoomY = availableHeight / boothPixelHeight;
+
+      const nextZoom = Math.max(
+        MIN_ZOOM,
+        Math.min(fitZoomX, fitZoomY, MAX_ZOOM, 1.65)
+      );
+
+      const boothCenterX = boothX + boothPixelWidth / 2;
+      const boothCenterY = boothY + boothPixelHeight / 2;
+
+      const nextPan = {
+        x: canvasSize.width / 2 - boothCenterX * nextZoom,
+        y: canvasSize.height / 2 - boothCenterY * nextZoom,
+      };
 
       setZoom(nextZoom);
-      setCanvasPan(getCenteredCanvasPan(nextZoom));
+      setCanvasPan(nextPan);
+    };
+
+    const handleResetView = () => {
+      fitBoothToView();
     };
 
     const handleSelectItem = (e, item) => {
@@ -1103,7 +1183,7 @@ const groupedBoothItems = useMemo(() => {
   const grouped = {};
 
   boothItems.forEach((item) => {
-    const key = `${item.id}-default`;
+    const key = `${item.id}-${item.selectedAttributeLabel || "default"}`;
 
     if (!grouped[key]) {
       grouped[key] = {
@@ -1112,7 +1192,11 @@ const groupedBoothItems = useMemo(() => {
         category: item.category,
         price: item.price,
         color: item.color,
-        attribute: `${getItemRealDimensions(item).widthFt}ft W x ${getItemRealDimensions(item).depthFt}ft D x ${getItemRealDimensions(item).heightFt}ft H`,
+        productImage: item.productImage,
+        image: item.image,
+        attribute:
+          item.selectedAttributeLabel ||
+          `${getItemRealDimensions(item).widthFt}ft W x ${getItemRealDimensions(item).depthFt}ft D x ${getItemRealDimensions(item).heightFt}ft H`,
         quantity: 0,
       };
     }
@@ -1478,7 +1562,7 @@ const gridLines = useMemo(() => {
       <Line
         key={`v-${i}`}
         points={[x, boothY, x, boothY + boothPixelHeight]}
-        stroke={i === 0 || i === selectedBooth.width ? "#111827" : "#d1d5db"}
+        stroke={i === 0 || i === selectedBooth.width ? "#1f2937" : "#e5e7eb"}
         strokeWidth={i === 0 || i === selectedBooth.width ? 2 : 1}
       />
     );
@@ -1564,8 +1648,30 @@ const handleAddItem = (product) => {
     return;
   }
 }
+
+const selectedAttributeLabel =
+  selectedProductAttributes[product.id] ||
+  product.attributes?.[0]?.label;
+
+const selectedAttribute =
+  product.attributes?.find((attr) => attr.label === selectedAttributeLabel) ||
+  product.attributes?.[0];
+
+const productWithAttribute = selectedAttribute
+  ? {
+      ...product,
+      selectedAttributeLabel: selectedAttribute.label,
+      price: selectedAttribute.price ?? product.price,
+      dimensions: {
+        widthFt: selectedAttribute.widthFt,
+        depthFt: selectedAttribute.depthFt,
+        heightFt: selectedAttribute.heightFt,
+      },
+    }
+  : product;
+
   const productItem = {
-    ...product,
+  ...productWithAttribute,
     rotation: 0,
     x: boothX,
     y: boothY,
@@ -1581,7 +1687,7 @@ const handleAddItem = (product) => {
     boothY + boothPixelHeight / 2 - size.height / 2
   );
 
-  const position = findNearestFreeSpace(product, preferredX, preferredY);
+  const position = findNearestFreeSpace(productWithAttribute, preferredX, preferredY);
 
   if (!position) {
     showMessage("No more space in the Booth Left to place the Item");
@@ -1589,7 +1695,7 @@ const handleAddItem = (product) => {
   }
 
   const newItem = {
-    ...product,
+    ...productWithAttribute,
     instanceId: Date.now(),
     x: position.x,
     y: position.y,
@@ -2723,32 +2829,27 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  if (!canvasSize.width || !canvasSize.height) return;
+  const timer = window.setTimeout(() => {
+    fitBoothToView();
+  }, 50);
 
-  setCanvasPan(getCenteredCanvasPan(zoom));
-}, [canvasSize.width, canvasSize.height]);
+  return () => window.clearTimeout(timer);
+}, [
+  canvasSize.width,
+  canvasSize.height,
+  selectedBooth.width,
+  selectedBooth.height,
+  stageWidth,
+  stageHeight,
+  boothX,
+  boothY,
+  boothPixelWidth,
+  boothPixelHeight,
+  leftPanelOpen,
+  rightPanelOpen,
+]);
 
 useEffect(() => {
-  if (!previousBoothOriginRef.current) {
-    previousBoothOriginRef.current = { x: boothX, y: boothY };
-    return;
-  }
-
-  const previous = previousBoothOriginRef.current;
-
-  const dx = boothX - previous.x;
-  const dy = boothY - previous.y;
-
-  if (dx === 0 && dy === 0) return;
-
-  setItems((prevItems) =>
-    prevItems.map((item) => ({
-      ...item,
-      x: item.x + dx,
-      y: item.y + dy,
-    }))
-  );
-
   previousBoothOriginRef.current = { x: boothX, y: boothY };
 }, [boothX, boothY]);
 
@@ -2857,11 +2958,13 @@ return (
 
     <aside className={`left-panel ${leftPanelOpen ? "open" : "closed"}`}>
 
-      <h2>Trade Show Booth Designer</h2>
+      <strong>
+                    Trade Show Booth Designer
+      </strong>
 
-      <p className="panel-note">
-        Plan your trade show booth layout, add display products, and download a booth proposal PDF for quote review.
-      </p>
+      <span className="planner-beta-tag">
+          FREE TOOL
+      </span>
 
       {message && <div className="inline-message">{message}</div>}
 
@@ -2894,10 +2997,6 @@ return (
             updateItemsWithHistory(updatedItems);
             clearSelection();
 
-            requestAnimationFrame(() => {
-              setCanvasPan(getCenteredCanvasPan(zoom));
-            });
-
             if (overflowCount > 0) {
               showMessage(
                 `${overflowCount} item${overflowCount > 1 ? "s were" : " was"} moved outside the booth because it no longer fits.`
@@ -2928,25 +3027,9 @@ return (
       </select>
 
 
-      <div className="launch-info-box">
-        <strong>How it works</strong>
-        <span>1. Choose your booth size.</span>
-        <span>2. Add display products.</span>
-        <span>3. Arrange your layout.</span>
-        <span>4. Download your booth plan.</span>
-      </div>
-
-      <div className="info-box">
-        <strong>Selected Booth</strong>
-        <span>{selectedBooth.width} ft wide</span>
-        <span>{selectedBooth.height} ft deep</span>
-        <span>Type: {boothType}</span>
-      </div>
-
-
       <div className="product-list-panel">
         <div className="product-list-header">
-          <strong>Add Trade Show Items</strong>
+          <strong>Products</strong>
 
           <button type="button" onClick={collapseAllCategories}>
             Collapse All
@@ -2994,11 +3077,49 @@ return (
 
                         <div className="product-card-body">
                           <strong>{product.name}</strong>
+
+                          {product.attributes?.length > 0 ? (
+                            <select
+                              className="product-attribute-select"
+                              value={
+                                selectedProductAttributes[product.id] ||
+                                product.attributes[0].label
+                              }
+                              onChange={(e) =>
+                                setSelectedProductAttributes((prev) => ({
+                                  ...prev,
+                                  [product.id]: e.target.value,
+                                }))
+                              }
+                            >
+                              {product.attributes.map((attribute) => (
+                                <option key={attribute.label} value={attribute.label}>
+                                  {attribute.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span>
+                              {product.dimensions?.widthFt || product.width}ft W x{" "}
+                              {product.dimensions?.depthFt || product.height}ft D
+                            </span>
+                          )}
+
                           <span>
-                            {product.dimensions?.widthFt || product.width}ft W x{" "}
-                            {product.dimensions?.depthFt || product.height}ft D
+                            $
+                            {(() => {
+                              const selectedLabel =
+                                selectedProductAttributes[product.id] ||
+                                product.attributes?.[0]?.label;
+
+                              const selectedAttr =
+                                product.attributes?.find((attr) => attr.label === selectedLabel) ||
+                                product.attributes?.[0];
+
+                              return selectedAttr?.price ?? product.price;
+                            })()}
                           </span>
-                          <span>${product.price}</span>
+
                           {product.requiresProductId && (
                             <span>
                               Requires: {getProductById(product.requiresProductId)?.name}
@@ -3057,178 +3178,175 @@ return (
 
 
 
-      <div className="action-grid">
-        <button disabled={selectedItemIds.length === 0} onClick={handleRotate}>
-          Rotate
-        </button>
-
-        <button disabled={selectedItemIds.length === 0} onClick={handleDuplicate}>
-          {hasMultiSelection ? "Duplicate Group" : "Duplicate"}
-        </button>
-
-        <button disabled={selectedItemIds.length === 0} onClick={handleToggleLock}>
-          {hasMultiSelection ? "Lock / Unlock Group" : selectedItem?.locked ? "Unlock" : "Lock"}
-        </button>
-
-        <button disabled={selectedItemIds.length === 0} onClick={handleDelete}>
-          {hasMultiSelection ? "Delete Group" : "Delete"}
-        </button>
-      </div>
-
-      <div className="history-actions">
-        <button disabled={history.length === 0} onClick={handleUndo}>
-          Undo
-        </button>
-
-        <button disabled={future.length === 0} onClick={handleRedo}>
-          Redo
-        </button>
-
-        <button disabled={items.length === 0} onClick={handleClearAll}>
-          Clear All
-        </button>
-      </div>
-
-      <div className="save-load-panel">
-        <h3>Save / Load Design</h3>
-
-        <button
-          className="save-design-button"
-          onClick={handleSaveDesign}
-          disabled={items.length === 0 && Object.keys(accessoryQty).length === 0}
-        >
-          Save Current Design
-        </button>
-        
-        <button
-          className="save-online-button"
-          onClick={handleSaveDesignOnline}
-          disabled={
-            onlineSaving ||
-            (items.length === 0 && Object.keys(accessoryQty).length === 0)
-          }
-        >
-          {onlineSaving ? "Saving Online..." : "Save Online & Copy Link"}
-        </button>
-
-        {onlineSaveUrl && (
-          <div className="online-save-link-box">
-            <strong>Shareable Link</strong>
-
-            <input value={onlineSaveUrl} readOnly />
-
-            <button
-              type="button"
-              className="email-online-link-button"
-              onClick={handleEmailOnlineSaveUrl}
-            >
-              Email This Booth Plan
-            </button>
-
-            <button
-              type="button"
-              className="copy-online-link-button"
-              onClick={handleCopyOnlineSaveUrl}
-            >
-              Copy Link Again
-            </button>
-          </div>
-        )}
-
-        {savedDesigns.length === 0 ? (
-          <p className="saved-empty">No saved designs yet.</p>
-        ) : (
-          <div className="saved-design-list">
-            {savedDesigns.map((design) => (
-              <div className="saved-design-row" key={design.id}>
-                <div>
-                  <strong>{design.name}</strong>
-                  <span>
-                    {new Date(design.savedAt).toLocaleDateString()} ·{" "}
-                    {design.selectedBooth?.label || "Booth"}
-                  </span>
-                </div>
-
-                <div className="saved-design-actions">
-                  <button onClick={() => handleLoadDesign(design.id)}>Load</button>
-                  <button onClick={() => handleDeleteSavedDesign(design.id)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-
-      <div className="preview-window">
-        <h3>Product Preview</h3>
-
-        {selectedItem ? (
-          <div className="preview-content">
-            <div
-              className="preview-image"
-              style={{ background: selectedItem.color }}
-            />
-
-           <div className="preview-details">
-              <strong>{selectedItem.name}</strong>
-
-              <span>
-                Size: {getItemRealDimensions(selectedItem).widthFt} ft W x{" "}
-                {getItemRealDimensions(selectedItem).depthFt} ft D x{" "}
-                {getItemRealDimensions(selectedItem).heightFt} ft H
-              </span>
-
-              <span>Price: ${selectedItem.price}</span>
-
-              <span>
-                Status: {selectedItem.locked ? "Locked" : "Unlocked"}
-              </span>
-
-              <span>
-                Bucket: {isInsideBooth(selectedItem) ? "Counted" : "Not Counted"}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="preview-empty">
-            Select a Product in Canvas to View
-          </div>
-        )}
-      </div>
     </aside>
 
             <main className="canvas-section">
               <div className="toolbar">
-                <div className="planner-branding">
 
-                  <div className="planner-brand-top">
-
-                    <strong>
-                      PrintDrill Booth Designer
-                    </strong>
-
-                    <span className="planner-beta-tag">
-                      FREE TOOL
-                    </span>
-
-                  </div>
-
-                  <span className="muted">
-                    Plan your trade show booth layout and generate a professional proposal PDF.
-                  </span>
-
+                <div className="toolbar-booth-pill">
+                  {selectedBooth.label} ft · {boothType}
                 </div>
 
-                <button
-                  className="done-button"
-                  disabled={groupedBoothItems.length === 0}
-                  onClick={handleOpenFinalWindow}
-                >
-                  Done - Download Booth
-                </button>
+                <div className="top-action-toolbar">
+                  <button
+                    type="button"
+                    title="Undo"
+                    disabled={history.length === 0}
+                    onClick={handleUndo}
+                  >
+                    ↶
+                    <span>Undo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Redo"
+                    disabled={future.length === 0}
+                    onClick={handleRedo}
+                  >
+                    ↷
+                    <span>Redo</span>
+                  </button>
+
+                  <span className="toolbar-divider"></span>
+
+                  <button
+                    type="button"
+                    title="Rotate"
+                    disabled={selectedItemIds.length === 0}
+                    onClick={handleRotate}
+                  >
+                    ⟳
+                    <span>Rotate</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Duplicate"
+                    disabled={selectedItemIds.length === 0}
+                    onClick={handleDuplicate}
+                  >
+                    ⧉
+                    <span>Duplicate</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Lock / Unlock"
+                    disabled={selectedItemIds.length === 0}
+                    onClick={handleToggleLock}
+                  >
+                    🔒
+                    <span>Lock</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Delete"
+                    disabled={selectedItemIds.length === 0}
+                    onClick={handleDelete}
+                  >
+                    🗑
+                    <span>Delete</span>
+                  </button>
+
+                  <span className="toolbar-divider"></span>
+
+                  <button
+                    type="button"
+                    title="Clear All"
+                    disabled={items.length === 0}
+                    onClick={handleClearAll}
+                  >
+                    🧹
+                    <span>Clear</span>
+                  </button>
+
+                  <span className="toolbar-divider"></span>
+
+                  <button
+                    type="button"
+                    title="Save Current Design"
+                    disabled={items.length === 0 && Object.keys(accessoryQty).length === 0}
+                    onClick={handleSaveDesign}
+                  >
+                    💾
+                    <span>Save</span>
+                  </button>
+
+                  <div className="share-action-wrap">
+                    <button
+                      type="button"
+                      title="Save Online & Copy Link"
+                      disabled={
+                        onlineSaving ||
+                        (items.length === 0 && Object.keys(accessoryQty).length === 0)
+                      }
+                      onClick={async () => {
+                        try {
+                          if (!onlineSaveUrl) {
+                            const shareUrl = await createOnlineDesignLink("Booth Design");
+
+                            setOnlineSaveUrl(shareUrl);
+                            showMessage("Online design link created");
+                          }
+
+                          setSharePopoverOpen(true);
+                        } catch (error) {
+                          console.error("Share popover save failed:", error);
+                          showMessage("Could not create share link");
+                        }
+                      }}
+                    >
+                      🔗
+                      <span>{onlineSaving ? "Saving" : "Share"}</span>
+                    </button>
+
+                    {sharePopoverOpen && (
+                      <div className="share-popover">
+                        <div className="share-popover-header">
+                          <strong>Share Design</strong>
+
+                          <button
+                            type="button"
+                            className="share-popover-close"
+                            onClick={() => setSharePopoverOpen(false)}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        {onlineSaveUrl ? (
+                          <>
+                            <div className="share-popover-link">
+                              {onlineSaveUrl}
+                            </div>
+
+                            <button
+                              type="button"
+                              className="share-popover-copy"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(onlineSaveUrl);
+                                  showMessage("Copied");
+                                  setSharePopoverOpen(false);
+                                } catch (error) {
+                                  console.error("Copy failed:", error);
+                                  showMessage("Could not copy link");
+                                }
+                              }}
+                            >
+                              Copy Link
+                            </button>
+                          </>
+                        ) : (
+                          <p>Save online first to generate a shareable link.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                </div>                
 
                   <div className="tool-mode-controls">
                     <button
@@ -3255,15 +3373,6 @@ return (
                     </button>
                   </div>
 
-                  <a
-                    className="planner-help-link"
-                    href="https://www.printdrill.com/pages/contact"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Need Booth Help?
-                  </a>
-
 
                 <div className="zoom-controls">
                   <button
@@ -3288,6 +3397,54 @@ return (
                     Reset
                   </button>
                 </div>
+              </div>
+
+              <div className="floating-preview-panel">
+                {selectedItem ? (
+                  <>
+                    <div className="floating-preview-top">
+                      <div>
+                        <strong className="floating-preview-title">
+                          {selectedItem.name}
+                        </strong>
+
+                        <span className="floating-preview-attribute">
+                          Size: {getItemRealDimensions(selectedItem).widthFt}×
+                          {getItemRealDimensions(selectedItem).depthFt}
+                        </span>
+                      </div>
+
+                      <div className="floating-preview-price-row">
+                        <span className="floating-preview-price">
+                          $ {selectedItem.price}
+                        </span>
+
+                        {selectedItem.productUrl && (
+                          <button
+                            type="button"
+                            className="floating-preview-open"
+                            onClick={() => openProductDetails(selectedItem.productUrl)}
+                            title="Open product page"
+                          >
+                            ↗
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="floating-preview-image-wrap">
+                      <img
+                        src={selectedItem.productImage || selectedItem.image}
+                        alt={selectedItem.name}
+                        className="floating-preview-product-image"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="floating-preview-empty-card">
+                    Add / Select Product on the Canvas
+                  </div>
+                )}
               </div>
 
               <div
@@ -3317,7 +3474,7 @@ return (
               y={0}
               width={stageWidth}
               height={stageHeight}
-              fill="#eef2ff"
+              fill="#f4f7fb"
             />
 
             <Group>
@@ -3344,8 +3501,12 @@ return (
                 width={boothPixelWidth}
                 height={boothPixelHeight}
                 fill="#ffffff"
-                stroke="#111827"
+                stroke="#1f2937"
                 strokeWidth={2}
+                shadowColor="rgba(15, 23, 42, 0.18)"
+                shadowBlur={16}
+                shadowOffset={{ x: 0, y: 8 }}
+                shadowOpacity={0.35}
               />
 
               {/* Adjacent Areas */}
@@ -3476,10 +3637,10 @@ return (
                 ))}
 
               <Text
-                text={`Booth Area: ${selectedBooth.label} ft`}
+                text={`${selectedBooth.label} Booth`}
                 x={boothX + 12}
                 y={boothY + 12}
-                fontSize={16}
+                fontSize={15}
                 fontStyle="bold"
                 fill="#111827"
               />
@@ -3660,21 +3821,35 @@ return (
       </button>
 
       <div className="right-panel-inner">
+        <button
+          className="right-panel-done-btn"
+          disabled={groupedBoothItems.length === 0}
+          onClick={handleOpenFinalWindow}
+        >
+          Done → Download Booth
+        </button>
         <div className="right-panel-header">
+      
           <h2>Item Bucket</h2>
           <button onClick={() => setRightPanelOpen(false)}>×</button>
         </div>
 
         {groupedBoothItems.length === 0 ? (
-          <p className="empty-bucket">No booth items added yet.</p>
+          <div className="empty-bucket-card">
+            <strong>No booth items yet</strong>
+            <span>Add products from the left panel to build your booth quote.</span>
+          </div>
         ) : (
           <div className="bucket-list">
             {groupedBoothItems.map((item) => (
               <div className="bucket-item" key={`${item.id}-${item.attribute}`}>
-                <div
-                  className="bucket-thumb"
-                  style={{ background: item.color }}
-                />
+                <div className="bucket-thumb">
+                  <img
+                    src={item.productImage || item.image}
+                    alt={item.name}
+                    className="bucket-thumb-image"
+                  />
+                </div>
                 <div className="bucket-info">
                   <strong>{item.name}</strong>
                   <span>{item.attribute}</span>
@@ -3807,13 +3982,7 @@ return (
           Estimate shown is for planning only. Final pricing will be confirmed after artwork, specifications, and design review.
         </div>
 
-        <button
-          className="download-button"
-          disabled={groupedBoothItems.length === 0}
-          onClick={handleOpenFinalWindow}
-        >
-          Done - Download Booth
-        </button>
+
       </div>
     </aside>
     {showLeadCapture && (
