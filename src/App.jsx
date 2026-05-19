@@ -219,7 +219,7 @@ const SAMPLE_PRODUCTS = [
     {
       label: "10ft",
       widthFt: 10,
-      depthFt: 1.8,
+      depthFt: 1.1,
       heightFt: 7.5,
       price: 590,
       productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
@@ -228,7 +228,7 @@ const SAMPLE_PRODUCTS = [
     {
       label: "10ft",
       widthFt: 10,
-      depthFt: 1.8,
+      depthFt: 1.1,
       heightFt: 10,
       price: 663,
       productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
@@ -237,7 +237,7 @@ const SAMPLE_PRODUCTS = [
     {
       label: "15ft",
       widthFt: 15,
-      depthFt: 1.8,
+      depthFt: 1.1,
       heightFt: 7.5,
       price: 793,
       productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
@@ -246,7 +246,7 @@ const SAMPLE_PRODUCTS = [
     {
       label: "15ft",
       widthFt: 15,
-      depthFt: 1.8,
+      depthFt: 1.1,
       heightFt: 10,
       price: 986,
       productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
@@ -255,7 +255,7 @@ const SAMPLE_PRODUCTS = [
     {
       label: "20ft",
       widthFt: 20,
-      depthFt: 1.8,
+      depthFt: 1.1,
       heightFt: 7.5,
       price: 999,
       productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
@@ -264,7 +264,7 @@ const SAMPLE_PRODUCTS = [
     {
       label: "20ft",
       widthFt: 20,
-      depthFt: 1.8,
+      depthFt: 1.1,
       heightFt: 10,
       price: 1215,
       productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
