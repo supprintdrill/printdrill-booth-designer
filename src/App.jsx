@@ -14,107 +14,165 @@ import "./App.css";
 import { supabase } from "./supabaseClient";
 
 const SAMPLE_PRODUCTS = [
-  {
-    id: "p1",
-    name: "Stretch Fabric Display",
-    width: 10,
-    height: 1,
-    dimensions: {
-      widthFt: 10,
-      depthFt: 1,
+{
+  id: "p1",
+  name: "Stretch Fabric Display",
+  placementRole: "wall_display",
+  color: "#4B35FD",
+  category: "Backdrops",
+  keywords: "fabric backdrop trade show display wall",
+  productUrl: "https://www.printdrill.com/products/straight-pillow-case-tension-fabric-backdrop",
+
+  attributes: [
+    {
+      label: "8ft",
+      widthFt: 8,
+      depthFt: 1.8,
       heightFt: 8,
+      price: 120,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/TensionFabricDisplays.jpg?v=1774958399",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10x8-Straight_Pillow_Case_Tension_Fabric_Display.png?v=1778893683",
     },
-    attributes: [
-      {
-        label: "10ft",
-        widthFt: 10,
-        depthFt: 1,
-        heightFt: 8,
-        price: 120,
-      },
-      {
-        label: "20ft",
-        widthFt: 20,
-        depthFt: 1,
-        heightFt: 8,
-        price: 420,
-      },
-    ],
-    placementRole: "wall_display",
-    image:
-    "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1200&auto=format&fit=crop",
-    color: "#4B35FD",
-    price: 120,
-    category: "Backdrops",
-    keywords: "fabric backdrop trade show display wall",
-    productImage:
-      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/TensionFabricDisplays.jpg?v=1774958399",
-    canvasImage:
-      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Pillow-Display-10-ft-0d.png?v=1765336351",
+    {
+      label: "10ft",
+      widthFt: 10,
+      depthFt: 1.8,
+      heightFt: 8,
+      price: 420,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/TensionFabricDisplays.jpg?v=1774958399",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10x8-Straight_Pillow_Case_Tension_Fabric_Display.png?v=1778893683",
     },
-  {
-    id: "p2",
-    name: "Deluxe Popup Counter",
-    width: 4,
-    height: 2,
-    dimensions: {
+    {
+      label: "20ft",
+      widthFt: 20,
+      depthFt: 1.8,
+      heightFt: 8,
+      price: 420,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/TensionFabricDisplays.jpg?v=1774958399",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/20x8-Straight_Pillow_Case_Tension_Fabric_Display.png?v=1778893683",
+    },
+  ],
+
+  // fallback only
+  width: 10,
+  height: 1.8,
+  price: 120,
+  productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/TensionFabricDisplays.jpg?v=1774958399",
+  canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10x8-Straight_Pillow_Case_Tension_Fabric_Display.png?v=1778893683",
+},
+
+{
+  id: "p6",
+  name: "Adjustable Banner Stand",
+  placementRole: "wall_display",
+  color: "#4B35FD",
+  category: "Backdrops",
+  keywords: "banner stand backdrop trade show display wall",
+  productUrl: "https://www.printdrill.com/products/step-and-repeat-banner-stand",
+
+  attributes: [
+    {
+      label: "8ft",
+      widthFt: 8,
+      depthFt: 1.8,
+      heightFt: 8,
+      price: 120,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Step_and_Repeat_Frame-min.jpg?v=1773109039",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8x8-Adjustable_Banner_Stand.png?v=1778903180",
+    },
+    {
+      label: "10ft",
+      widthFt: 10,
+      depthFt: 1.8,
+      heightFt: 8,
+      price: 420,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Step_and_Repeat_Frame-min.jpg?v=1773109039",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10x8-Adjustable_Banner_Stand.png?v=1778903180",
+    },
+  ],
+
+  // fallback only
+  width: 10,
+  height: 1.8,
+  price: 120,
+  productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Step_and_Repeat_Frame-min.jpg?v=1773109039",
+  canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8x8-Adjustable_Banner_Stand.png?v=1778903180",
+},
+
+{
+  id: "p3",
+  name: "Full Printed Table Cover Throws",
+  placementRole: "visitor_facing",
+  color: "#4B35FD",
+  category: "Tables & Counters",
+  keywords: "trade show table cover",
+  productUrl: "https://www.printdrill.com/products/trade-show-printed-table-cover-throws",
+
+  attributes: [
+    {
+      label: "4ft",
       widthFt: 4,
-      depthFt: 2,
-      heightFt: 3,
+      depthFt: 2.6,
+      heightFt: 2.5,
+      price: 99,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Full_Color_Print_Table_Cover_Throws-min.jpg?v=1768183309",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/4ft-_Table_Cover-2.png?v=1779067063",
     },
-    placementRole: "visitor_facing",
-    image:
-  "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1200&auto=format&fit=crop",
-    color: "#0169F5",
-    price: 80,
-    category: "Counter",
-    keywords: "event table booth counter display table",
-    productImage:
-      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Deluxe_Popup_Counter-1-min.jpg?v=1764447977",
-    canvasImage:
-      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Pillow-Display-10-ft-0d.png?v=1765336351",
-    },
-  {
-    id: "p3",
-    name: "Full Printed Table Cover Throws",
-    width: 6,
-    height: 2,
-    dimensions: {
+    {
+      label: "6ft",
       widthFt: 6,
-      depthFt: 2,
-      heightFt: 3,
+      depthFt: 2.6,
+      heightFt: 2.5,
+      price: 123,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Full_Color_Print_Table_Cover_Throws-min.jpg?v=1768183309",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/6ft_-_Table_Cover-2.png?v=1779067063",
     },
-    placementRole: "visitor_facing",
-    image:
-  "https://images.unsplash.com/photo-1517705008128-361805f42e86?q=80&w=1200&auto=format&fit=crop",
-    color: "#D4C830",
-    price: 95,
-    category: "Table Cover",
-    keywords: "trade show table cover",
-    productImage:
-      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Full_Color_Print_Table_Cover_Throws-min.jpg?v=1768183309",
-    canvasImage:
-      "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/FullColorPrintedTableCover.jpg?v=1768183309",
-  },
-  {
-    id: "p4",
-    name: "Deluxe Wide Base Roll Up",
-    width: 3,
-    height: 1,
-    dimensions: {
-      widthFt: 3,
-      depthFt: 1,
-      heightFt: 7,
+    {
+      label: "8ft",
+      widthFt: 8,
+      depthFt: 2.6,
+      heightFt: 2.5,
+      price: 144,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Full_Color_Print_Table_Cover_Throws-min.jpg?v=1768183309",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8ft_-_Table_Cover-2.png?v=1779067063",
     },
-    placementRole: "wall_display",
-    image:
-  "https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1200&auto=format&fit=crop",
-    color: "#8DFFDD",
-    price: 65,
-    category: "Standing Banners",
-    keywords: "rollup banner retractable banner stand",
-    productUrl: "https://www.printdrill.com/products/retractable-deluxe-wide-base-roll-up-banner",
-  },
+  ],
+
+  // fallback only
+  width: 6,
+  height: 2.6,
+  price: 123,
+  productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Full_Color_Print_Table_Cover_Throws-min.jpg?v=1768183309",
+  canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/6ft_-_Table_Cover-2.png?v=1779067063",
+},
+{
+  id: "p4",
+  name: "Deluxe Popup Counter",
+  placementRole: "wall_display",
+  color: "#4B35FD",
+  category: "Tables & Counters",
+  keywords: "Counter table",
+  productUrl: "https://www.printdrill.com/products/deluxe-popup-counter",
+
+  attributes: [
+    {
+      label: "2.6ft x 1.6 ft",
+      widthFt: 2.6,
+      depthFt: 1.6,
+      heightFt: 3.2,
+      price: 299,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Deluxe_Popup_Counter-1-min.jpg?v=1764447977",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Deluxe_Popup_Counter.png?v=1778975857",
+    },
+  ],
+
+  // fallback only
+  width: 2.6,
+  height: 1.6,
+  price: 299,
+  productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Deluxe_Popup_Counter-1-min.jpg?v=1764447977",
+  canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Deluxe_Popup_Counter.png?v=1778975857",
+},
   {
     id: "p5",
     name: "SEG LightBox Display",
@@ -138,6 +196,137 @@ const SAMPLE_PRODUCTS = [
 
     requiresProductId: "p1",
   },
+
+{
+  id: "p8",
+  name: "Straight Pop Up Display",
+  placementRole: "wall_display",
+  color: "#4B35FD",
+  category: "Backdrops",
+  keywords: "Fabric Pop Up Straight Display backdrop",
+  productUrl: "https://www.printdrill.com/products/step-and-repeat-fabric-pop-up-straight-display",
+
+  attributes: [
+    {
+      label: "7.5ft",
+      widthFt: 7.5,
+      depthFt: 1.1,
+      heightFt: 7.5,
+      price: 485,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/7.5_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+    {
+      label: "10ft",
+      widthFt: 10,
+      depthFt: 1.8,
+      heightFt: 7.5,
+      price: 590,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+    {
+      label: "10ft",
+      widthFt: 10,
+      depthFt: 1.8,
+      heightFt: 10,
+      price: 663,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+    {
+      label: "15ft",
+      widthFt: 15,
+      depthFt: 1.8,
+      heightFt: 7.5,
+      price: 793,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/15_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+    {
+      label: "15ft",
+      widthFt: 15,
+      depthFt: 1.8,
+      heightFt: 10,
+      price: 986,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/15_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+    {
+      label: "20ft",
+      widthFt: 20,
+      depthFt: 1.8,
+      heightFt: 7.5,
+      price: 999,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/20_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+    {
+      label: "20ft",
+      widthFt: 20,
+      depthFt: 1.8,
+      heightFt: 10,
+      price: 1215,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/20_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+    },
+  ],
+
+  // fallback only
+  width: 10,
+  height: 7.5,
+  price: 590,
+  productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8_ft_Straignt_Popup_Display_Side.jpg?v=1776879183",
+  canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/10_ft_Straight_Pop_Up_Display-2.png?v=1779071127",
+},
+
+  
+  {
+  id: "p7",
+  name: "Stretch Fit Table Cover",
+  placementRole: "wall_display",
+  color: "#4B35FD",
+  category: "Tables & Counters",
+  keywords: "stretch fit table cover",
+  productUrl: "https://www.printdrill.com/products/stretch-table-covers-with-open-back",
+
+  attributes: [
+    {
+      label: "4ft",
+      widthFt: 4,
+      depthFt: 2.6,
+      heightFt: 2.8,
+      price: 114,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Stretch_Table_Cover_with_Open_Back_Side_View-min.jpg?v=1767810452",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/4ft_Stretch_Fit_Table_Cover-2.png?v=1778934635",
+    },
+    {
+      label: "6ft",
+      widthFt: 6,
+      depthFt: 2.6,
+      heightFt: 2.8,
+      price: 127,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Stretch_Table_Cover_with_Open_Back_Side_View-min.jpg?v=1767810452",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/6ft_Stretch_Fit_Table_Cover-2.png?v=1778934755",
+    },
+    {
+      label: "8ft",
+      widthFt: 8,
+      depthFt: 2.6,
+      heightFt: 2.8,
+      price: 137,
+      productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Stretch_Table_Cover_with_Open_Back_Side_View-min.jpg?v=1767810452",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/8ft_Stretch_Fit_Table_Cover-2.png?v=1778934774",
+    },
+  ],
+
+  // fallback only
+  width: 6,
+  height: 2.6,
+  price: 127,
+  productImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/Stretch_Table_Cover_with_Open_Back_Side_View-min.jpg?v=1767810452",
+      canvasImage: "https://cdn.shopify.com/s/files/1/0606/7034/5293/files/6ft_Stretch_Fit_Table_Cover-2.png?v=1778934755",
+},
 ];
 
 const ACCESSORIES = [
@@ -235,6 +424,8 @@ function BoothProduct({
   const widthFt = item.dimensions?.widthFt ?? item.width ?? 1;
   const depthFt = item.dimensions?.depthFt ?? item.height ?? 1;
 
+  const image = useImageElement(item.canvasImage);
+
   return (
     <>
       <Rect
@@ -251,6 +442,37 @@ function BoothProduct({
         shadowOpacity={0.3}
       />
 
+      {image ? (
+        <KonvaImage
+          image={image}
+          width={size.width}
+          height={size.height}
+          cornerRadius={6}
+          opacity={item.locked ? 0.65 : 1}
+        />
+      ) : (
+        <>
+          <Text
+            text={item.name}
+            x={6}
+            y={8}
+            fontSize={11}
+            fill="#111827"
+            fontStyle="bold"
+            width={size.width - 12}
+          />
+
+          <Text
+            text={`${widthFt}ft x ${depthFt}ft`}
+            x={6}
+            y={size.height - 20}
+            fontSize={10}
+            fill="#6b7280"
+            width={size.width - 12}
+          />
+        </>
+      )}
+
       {hasClearanceWarning && (
         <Rect
           x={-3}
@@ -263,25 +485,6 @@ function BoothProduct({
           cornerRadius={8}
         />
       )}
-
-      <Text
-        text={item.name}
-        x={6}
-        y={8}
-        fontSize={11}
-        fill="#111827"
-        fontStyle="bold"
-        width={size.width - 12}
-      />
-
-      <Text
-        text={`${widthFt}ft x ${depthFt}ft`}
-        x={6}
-        y={size.height - 20}
-        fontSize={10}
-        fill="#6b7280"
-        width={size.width - 12}
-      />
 
       {item.locked && (
         <Text
@@ -1663,10 +1866,12 @@ const productWithAttribute = selectedAttribute
       selectedAttributeLabel: selectedAttribute.label,
       price: selectedAttribute.price ?? product.price,
       dimensions: {
-        widthFt: selectedAttribute.widthFt,
-        depthFt: selectedAttribute.depthFt,
-        heightFt: selectedAttribute.heightFt,
-      },
+          widthFt: selectedAttribute.widthFt,
+          depthFt: selectedAttribute.depthFt,
+          heightFt: selectedAttribute.heightFt,
+        },
+        canvasImage: selectedAttribute.canvasImage || product.canvasImage,
+        productImage: selectedAttribute.productImage || product.productImage,
     }
   : product;
 
