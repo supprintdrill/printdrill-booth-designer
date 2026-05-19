@@ -431,7 +431,13 @@ function BoothProduct({
       <Rect
         width={size.width}
         height={size.height}
-        fill={invalidItemId === item.instanceId ? "#fee2e2" : "#f8fafc"}
+        fill={
+                invalidItemId === item.instanceId
+                  ? "#fee2e2"
+                  : image
+                  ? "rgba(255,255,255,0)"
+                  : "#f8fafc"
+              }
         stroke={invalidItemId === item.instanceId ? "#ef4444" : item.color}
         strokeWidth={2}
         cornerRadius={6}
@@ -439,14 +445,23 @@ function BoothProduct({
         shadowColor="rgba(15, 23, 42, 0.16)"
         shadowBlur={8}
         shadowOffset={{ x: 0, y: 4 }}
-        shadowOpacity={0.3}
+        shadowOpacity={image ? 0 : 0.3}
       />
 
       {image ? (
         <KonvaImage
           image={image}
-          width={size.width}
-          height={size.height}
+          x={size.width / 2}
+          y={size.height / 2}
+          width={Math.abs((item.rotation || 0) % 180) === 90 ? size.height : size.width}
+          height={Math.abs((item.rotation || 0) % 180) === 90 ? size.width : size.height}
+          offsetX={
+            (Math.abs((item.rotation || 0) % 180) === 90 ? size.height : size.width) / 2
+          }
+          offsetY={
+            (Math.abs((item.rotation || 0) % 180) === 90 ? size.width : size.height) / 2
+          }
+          rotation={item.rotation || 0}
           cornerRadius={6}
           opacity={item.locked ? 0.65 : 1}
         />
@@ -2763,6 +2778,69 @@ const handleClearAll = () => {
   clearSelection();
 };
 
+const handleRotateBoothOrientation = () => {
+  const oldBooth = selectedBooth;
+
+  const newBooth = {
+    label: `${oldBooth.height} x ${oldBooth.width}`,
+    width: oldBooth.height,
+    height: oldBooth.width,
+  };
+
+  const oldBoothPixelWidth = oldBooth.width * FEET_TO_PIXEL;
+  const oldBoothPixelHeight = oldBooth.height * FEET_TO_PIXEL;
+
+  const newBoothPixelWidth = newBooth.width * FEET_TO_PIXEL;
+  const newBoothPixelHeight = newBooth.height * FEET_TO_PIXEL;
+
+  const updatedItems = items.map((item) => {
+    const itemSize = getItemPixelSize(item);
+
+    const itemCenterX = item.x + itemSize.width / 2;
+    const itemCenterY = item.y + itemSize.height / 2;
+
+    const isBoothItem =
+      item.placement === "booth" || isInsideBooth(item);
+
+    if (!isBoothItem) {
+      return item;
+    }
+
+    const relativeCenterX = itemCenterX - boothX;
+    const relativeCenterY = itemCenterY - boothY;
+
+    const rotatedRelativeCenterX =
+      relativeCenterY;
+
+    const rotatedRelativeCenterY =
+      oldBoothPixelWidth - relativeCenterX;
+
+    const rotatedItem = {
+      ...item,
+      rotation: ((item.rotation || 0) + 90) % 360,
+    };
+
+    const rotatedSize = getItemPixelSize(rotatedItem);
+
+    return {
+      ...rotatedItem,
+      x: boothX + rotatedRelativeCenterX - rotatedSize.width / 2,
+      y: boothY + rotatedRelativeCenterY - rotatedSize.height / 2,
+      placement: "booth",
+    };
+  });
+
+  setSelectedBooth(newBooth);
+  updateItemsWithHistory(updatedItems);
+  clearSelection();
+
+  setTimeout(() => {
+    fitBoothToView();
+  }, 80);
+
+  showMessage("Booth orientation rotated");
+};
+
 const handleBoothTypeChange = (type) => {
   setBoothType(type);
   setAdjacentAreas(BOOTH_TYPE_PRESETS[type]);
@@ -3171,8 +3249,6 @@ return (
           FREE TOOL
       </span>
 
-      {message && <div className="inline-message">{message}</div>}
-
       {loadedFromSupabase && (
         <div className="supabase-loaded-banner">
           Loaded from shared Supabase design link
@@ -3191,29 +3267,43 @@ return (
 
       <label className="field-label">Booth Size</label>
       <select
-          onChange={(e) => {
-            const booth = BOOTH_SIZES.find(
-              (item) => item.label === e.target.value
+        value={selectedBooth.label}
+        onChange={(e) => {
+          const booth = BOOTH_SIZES.find(
+            (item) => item.label === e.target.value
+          );
+
+          if (!booth) return;
+
+          const { updatedItems, overflowCount } =
+            moveOverflowItemsToOuterCanvas(booth);
+
+          setSelectedBooth(booth);
+          updateItemsWithHistory(updatedItems);
+          clearSelection();
+
+          if (overflowCount > 0) {
+            showMessage(
+              `${overflowCount} item${
+                overflowCount > 1 ? "s were" : " was"
+              } moved outside the booth because it no longer fits.`
             );
-
-            const { updatedItems, overflowCount } = moveOverflowItemsToOuterCanvas(booth);
-
-            setSelectedBooth(booth);
-            updateItemsWithHistory(updatedItems);
-            clearSelection();
-
-            if (overflowCount > 0) {
-              showMessage(
-                `${overflowCount} item${overflowCount > 1 ? "s were" : " was"} moved outside the booth because it no longer fits.`
-              );
-            }
-          }}
+          }
+        }}
       >
         {BOOTH_SIZES.map((booth) => (
           <option key={booth.label} value={booth.label}>
             {booth.label}
           </option>
         ))}
+
+        {!BOOTH_SIZES.some(
+          (booth) => booth.label === selectedBooth.label
+        ) && (
+          <option value={selectedBooth.label}>
+            {selectedBooth.label}
+          </option>
+        )}
       </select>
 
       <label className="field-label" style={{ marginTop: 16 }}>
@@ -3385,6 +3475,12 @@ return (
 
     </aside>
 
+            {message && (
+              <div className="canvas-toast">
+                {message}
+              </div>
+            )}
+
             <main className="canvas-section">
               <div className="toolbar">
 
@@ -3393,6 +3489,17 @@ return (
                 </div>
 
                 <div className="top-action-toolbar">
+
+                  <button
+                    type="button"
+                    title="Rotate Booth Orientation"
+                    onClick={handleRotateBoothOrientation}
+                  >
+                    🔄
+                    <span>Booth</span>
+                  </button>
+
+
                   <button
                     type="button"
                     title="Undo"
@@ -3424,6 +3531,7 @@ return (
                     ⟳
                     <span>Rotate</span>
                   </button>
+
 
                   <button
                     type="button"
